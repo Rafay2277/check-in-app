@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "fourtillfour Check-In",
+    "slug": "checkin-member",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "checkin",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#111111"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.checkin.member"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#111111"
+      },
+      "package": "com.checkin.member",
+      "usesCleartextTraffic": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-asset",
+      "expo-font"
+    ],
+    "extra": {
+      "apiBaseUrl": "http://192.168.0.40:3000",
+      "router": {},
+      "eas": {
+        "projectId": "63932906-c9e5-41aa-b115-48e2067d66e4"
+      }
+    },
+    "owner": "rafaysial"
+  }
+}

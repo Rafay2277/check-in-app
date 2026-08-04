@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#111111" />
+    <title>fourtillfour Check-In</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Francois+One&family=Montserrat:wght@400;500;600;700&family=PT+Serif:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+    <main class="app">
+      <header class="masthead">
+        <p class="brand">fourtillfour</p>
+        <p class="brand-sub" id="sessionMeta">Staff check-in</p>
+      </header>
+
+      <section id="pinScreen" class="screen screen-pin">
+        <div class="pin-copy">
+          <p class="eyebrow">Cafe + car club</p>
+          <h1>Unlock the counter</h1>
+          <p class="lede">
+            Shared shift PIN for scanning members, reviewing check-ins, and looking
+            up accounts.
+          </p>
+        </div>
+        <form id="pinForm" class="pin-form" autocomplete="off">
+          <label class="field-label" for="pinInput">Shift PIN</label>
+          <input
+            id="pinInput"
+            type="password"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="12"
+            placeholder="••••"
+            required
+          />
+          <button type="submit" class="btn-primary">Start shift</button>
+        </form>
+        <p id="pinError" class="error" hidden></p>
+      </section>
+
+      <div id="staffShell" class="staff-shell" hidden>
+        <nav class="rail" role="tablist" aria-label="Staff tools">
+          <button type="button" class="rail-tab active" data-tab="scan">
+            Scan
+          </button>
+          <button type="button" class="rail-tab" data-tab="analytics">
+            Analytics
+          </button>
+          <button type="button" class="rail-tab" data-tab="lookup">
+            Lookup
+          </button>
+        </nav>
+
+        <section id="scanScreen" class="screen panel" data-panel="scan">
+          <div class="viewport-wrap">
+            <video id="video" playsinline muted></video>
+            <canvas id="overlay" aria-hidden="true"></canvas>
+            <div class="viewfinder" aria-hidden="true">
+              <span class="corner tl"></span>
+              <span class="corner tr"></span>
+              <span class="corner bl"></span>
+              <span class="corner br"></span>
+              <span class="scanline"></span>
+            </div>
+          </div>
+          <p class="hint center" id="scanHint">Hold the member QR in the frame</p>
+          <button id="stopBtn" type="button" class="btn-ghost">End shift</button>
+        </section>
+
+        <section
+          id="resultScreen"
+          class="screen panel"
+          data-panel="scan"
+          hidden
+        >
+          <div id="resultCard" class="verdict">
+            <p id="resultIcon" class="verdict-kicker">Scan result</p>
+            <h1 id="resultTitle" class="verdict-title">Approved</h1>
+            <p id="resultDetail" class="lede"></p>
+          </div>
+          <button id="scanAgainBtn" type="button" class="btn-primary">
+            Scan next
+          </button>
+        </section>
+
+        <section
+          id="analyticsScreen"
+          class="screen panel"
+          data-panel="analytics"
+          hidden
+        >
+          <header class="panel-head">
+            <h1>Check-ins</h1>
+            <p class="lede">Totals and the full member report for any range.</p>
+          </header>
+
+          <div class="today-block" data-detail="today" role="button" tabindex="0">
+            <p class="eyebrow">Today</p>
+            <p id="statToday" class="mega-number">—</p>
+            <p id="statTodayRejected" class="meta-line">0 rejected</p>
+          </div>
+
+          <div class="split-stats">
+            <button type="button" class="stat-hit" data-detail="week">
+              <p class="eyebrow">This week</p>
+              <p id="statWeek" class="number">—</p>
+              <p id="statWeekRejected" class="meta-line">0 rejected</p>
+            </button>
+            <button type="button" class="stat-hit" data-detail="month">
+              <p class="eyebrow">This month</p>
+              <p id="statMonth" class="number">—</p>
+              <p id="statMonthRejected" class="meta-line">0 rejected</p>
+            </button>
+          </div>
+
+          <form id="rangeForm" class="range-form">
+            <div class="range-fields">
+              <label>
+                <span class="field-label">From</span>
+                <input id="rangeFrom" type="date" required />
+              </label>
+              <label>
+                <span class="field-label">To</span>
+                <input id="rangeTo" type="date" required />
+              </label>
+            </div>
+            <div class="range-actions">
+              <button type="submit" class="btn-primary">Apply range</button>
+              <button id="refreshAnalytics" type="button" class="btn-ghost">
+                Refresh
+              </button>
+            </div>
+          </form>
+
+          <div class="range-summary" data-detail="range" role="button" tabindex="0">
+            <p class="eyebrow">Selected range</p>
+            <p id="statRange" class="number">—</p>
+            <p id="statRangeRejected" class="meta-line">0 rejected</p>
+          </div>
+
+          <div id="dailyBars" class="daily-bars" aria-label="Daily check-ins"></div>
+
+          <section class="report">
+            <div class="report-head">
+              <h2>Check-in report</h2>
+              <p id="reportScope" class="meta-line">Showing selected range</p>
+            </div>
+            <ul id="checkinReport" class="report-list"></ul>
+            <p id="reportEmpty" class="meta-line" hidden>No check-ins in this view.</p>
+          </section>
+
+          <p id="analyticsError" class="error" hidden></p>
+        </section>
+
+        <section
+          id="lookupScreen"
+          class="screen panel"
+          data-panel="lookup"
+          hidden
+        >
+          <header class="panel-head">
+            <h1>Lookup</h1>
+            <p class="lede">Find a member by name or phone when a QR isn’t available.</p>
+          </header>
+          <label class="field-label" for="lookupInput">Search</label>
+          <input
+            id="lookupInput"
+            class="search-input"
+            type="search"
+            placeholder="Name or phone number"
+            autocomplete="off"
+          />
+          <p id="lookupHint" class="meta-line lookup-status">
+            Type at least 2 characters
+          </p>
+          <ul id="lookupResults" class="lookup-list"></ul>
+          <p id="lookupError" class="error" hidden></p>
+        </section>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
