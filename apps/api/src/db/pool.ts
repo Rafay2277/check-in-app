@@ -2,7 +2,6 @@ import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 import { env } from "../config";
 
 const needsSsl =
-  env.NODE_ENV === "production" ||
   /supabase\.co/i.test(env.DATABASE_URL) ||
   /[?&]sslmode=require/i.test(env.DATABASE_URL);
 
