@@ -9,8 +9,8 @@ Do **not** share your GitHub password in chat. Use the browser login flow.
 ### Option A — GitHub CLI (recommended)
 
 ```bash
-# Install if needed
-brew install gh
+# If gh is not on your PATH yet (we installed a local copy):
+export PATH="$HOME/.local/bin:$PATH"
 
 gh auth login
 # GitHub.com → HTTPS → Login with a web browser → paste the code
