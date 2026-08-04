@@ -86,8 +86,8 @@ Requires **Business** (or Cloud) plan with Node.js Web Apps.
 4. Add **Environment variables** (see below) → **Deploy**
 5. Every push to `main` rebuilds and restarts automatically
 6. Smoke test:
-   - `https://YOUR_HOST/health`
-   - `https://YOUR_HOST/scanner/` (staff PIN)
+   - `https://dashboard.nouraiz.com/health`
+   - `https://dashboard.nouraiz.com/scanner/` (staff PIN)
 
 ## 4. Environment variables (Hostinger)
 
@@ -96,8 +96,8 @@ Set these in hPanel → Environment variables. Do **not** commit secrets.
 | Variable | Example / notes |
 | --- | --- |
 | `NODE_ENV` | `production` |
-| `PUBLIC_BASE_URL` | `https://YOUR_HOSTINGER_HOSTNAME` |
-| `DATABASE_URL` | Supabase URI with `sslmode=require` |
+| `PUBLIC_BASE_URL` | `https://dashboard.nouraiz.com` |
+| `DATABASE_URL` | Supabase URI with `sslmode=require` (project `oimnlcqzyrcwonohccku`) |
 | `JWT_ACCESS_SECRET` | long random string (16+ chars) |
 | `JWT_REFRESH_SECRET` | long random string (16+ chars) |
 | `STAFF_PIN` | staff scanner PIN |
@@ -112,7 +112,7 @@ Set these in hPanel → Environment variables. Do **not** commit secrets.
 
 Do **not** override Hostinger’s injected `PORT` unless support tells you to.
 
-Optional until subdomain: leave `PUBLIC_HTTPS_BASE_URL` unset (Hostinger TLS terminates at the edge).
+Leave `PUBLIC_HTTPS_BASE_URL` unset — Hostinger terminates TLS at the edge for `dashboard.nouraiz.com`.
 
 ## 5. Keep-alive (outbox on Hostinger)
 
@@ -124,18 +124,21 @@ Hostinger **stops idle Node processes**. The outbox `setInterval` only runs whil
 **You still need a keep-alive ping** so GHL sync can retry if a push failed and no one is scanning:
 
 1. Create a free monitor at [cron-job.org](https://cron-job.org) or [UptimeRobot](https://uptimerobot.com)
-2. HTTP **GET** `https://YOUR_HOST/health` every **1–2 minutes**
+2. HTTP **GET** `https://dashboard.nouraiz.com/health` every **1–2 minutes**
 3. Confirm `/health` returns `{"ok":true,...}`
 
-## 6. Subdomain (later)
+## 6. Subdomain — `dashboard.nouraiz.com` (scanner dashboard)
 
-When you have a domain:
+This Hostinger Node app is the **staff scanner dashboard** (not the Expo member app).
 
-1. hPanel → Domains → add subdomain (e.g. `staging.yourdomain.com`)
-2. Point it at this Node.js website / enable SSL
-3. Update `PUBLIC_BASE_URL` to `https://staging.yourdomain.com`
-4. Point the member app `extra.apiBaseUrl` at the same HTTPS origin
-5. Redeploy / restart so env changes apply
+1. In hPanel → **Domains** (or the Node.js website settings): attach / park subdomain **`dashboard.nouraiz.com`** to this Node.js web app
+2. If DNS is at Hostinger: add an **A** record for `dashboard` pointing at the hosting IP Hostinger shows (or use their “Add subdomain” wizard)
+3. If DNS is elsewhere (Cloudflare, etc.): create **A**/ **CNAME** as Hostinger instructs for that subdomain
+4. Wait for SSL (Let’s Encrypt) to become active on `https://dashboard.nouraiz.com`
+5. Set Hostinger env `PUBLIC_BASE_URL=https://dashboard.nouraiz.com` and **redeploy/restart**
+6. Open:
+   - Staff UI: https://dashboard.nouraiz.com/scanner/
+   - Health: https://dashboard.nouraiz.com/health
 
 ## Local vs production
 
