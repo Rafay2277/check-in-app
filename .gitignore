@@ -1,3 +1,22 @@
 node_modules/
-dist/
 apps/api/dist/
+build/
+.expo/
+.expo-shared/
+web-build/
+*.log
+.env
+.env.local
+.DS_Store
+coverage/
+*.tsbuildinfo
+apps/member/.expo/
+.data/
+apps/.data/
+apps/api/certs/
+apps/member/.git/
+*.apk
+*.aab
+
+# Root dist/ is committed so Hostinger always has a runnable build artifact.
+# Refresh it with: npm run build

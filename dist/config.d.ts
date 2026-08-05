@@ -1,0 +1,28 @@
+export declare const env: {
+    SKIP_SMS_OTP: boolean;
+    MOCK_INTEGRATIONS: boolean;
+    NODE_ENV: "development" | "test" | "production";
+    PORT: number;
+    HTTPS_PORT: number;
+    PUBLIC_BASE_URL: string;
+    PUBLIC_HTTPS_BASE_URL: string;
+    DATABASE_URL: string;
+    JWT_ACCESS_SECRET: string;
+    JWT_REFRESH_SECRET: string;
+    ACCESS_TOKEN_TTL_SECONDS: number;
+    REFRESH_TOKEN_TTL_SECONDS: number;
+    STAFF_PIN: string;
+    STAFF_SESSION_TTL_SECONDS: number;
+    DEFAULT_PHONE_COUNTRY: string;
+    TWILIO_ACCOUNT_SID: string;
+    TWILIO_AUTH_TOKEN: string;
+    TWILIO_FROM_NUMBER: string;
+    GHL_API_BASE_URL: string;
+    GHL_ACCESS_TOKEN: string;
+    GHL_LOCATION_ID: string;
+    GHL_POINTS_FIELD_KEY: string;
+    GHL_POINTS_FIELD_ID: string;
+    OUTBOX_POLL_INTERVAL_MS: number;
+    OUTBOX_MAX_ATTEMPTS: number;
+};
+export declare function assertLiveIntegrationsConfigured(): void;
