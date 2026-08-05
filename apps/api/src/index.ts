@@ -15,6 +15,13 @@ import { pool } from "./db/pool";
 
 assertLiveIntegrationsConfigured();
 
+process.on("uncaughtException", (err) => {
+  console.error("[fatal] uncaughtException", err);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("[fatal] unhandledRejection", err);
+});
+
 const app = express();
 
 app.use(cors());
@@ -83,8 +90,11 @@ if (!isProduction) {
 
 const servers: Array<http.Server | https.Server> = [];
 
-httpServer.listen(env.PORT, () => {
-  console.log(`HTTP  API:  ${env.PUBLIC_BASE_URL}`);
+// Hostinger / reverse proxies need an explicit host bind
+const listenHost = isProduction ? "0.0.0.0" : undefined;
+
+httpServer.listen(env.PORT, listenHost, () => {
+  console.log(`HTTP  API:  ${env.PUBLIC_BASE_URL} (port ${env.PORT})`);
   console.log(
     isProduction
       ? `Scanner: ${env.PUBLIC_BASE_URL}/scanner/`
