@@ -47,8 +47,17 @@ app.use("/api/staff", staffRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/ghl", ghlRouter);
 
-// Staff scanner — same Express host at /scanner
-const scannerDir = path.resolve(__dirname, "../../scanner");
+// Staff scanner — Hostinger flattens to dist/scanner; local monorepo uses apps/scanner
+const scannerCandidates = [
+  path.resolve(__dirname, "scanner"), // dist/scanner (Hostinger prepare-hostinger)
+  path.resolve(__dirname, "../../scanner"), // apps/api/dist → apps/scanner
+  path.resolve(process.cwd(), "apps/scanner"),
+  path.resolve(process.cwd(), "dist/scanner"),
+];
+const scannerDir =
+  scannerCandidates.find((dir) => fs.existsSync(path.join(dir, "index.html"))) ??
+  scannerCandidates[0];
+console.log(`[static] scanner dir: ${scannerDir}`);
 app.use("/scanner", express.static(scannerDir, { index: "index.html" }));
 
 app.use(

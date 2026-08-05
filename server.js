@@ -1,21 +1,32 @@
 /**
  * Hostinger entry file (repo root).
- * Starts the Express API quickly; migrations run in a child process and
- * must not block / crash the HTTP server if the schema is already applied.
+ * Prefers flattened ./dist from prepare-hostinger; falls back to apps/api/dist.
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
-const distIndex = path.join(__dirname, "apps", "api", "dist", "index.js");
-const migrateJs = path.join(__dirname, "apps", "api", "dist", "db", "migrate.js");
+function pick(...candidates) {
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
 
-if (!fs.existsSync(distIndex)) {
+const distIndex = pick(
+  path.join(__dirname, "dist", "index.js"),
+  path.join(__dirname, "apps", "api", "dist", "index.js")
+);
+
+if (!distIndex) {
   console.error(
-    "[server] Missing apps/api/dist/index.js — build did not produce output. Check build logs."
+    "[server] Missing dist/index.js — build did not produce output. Check build logs."
   );
   process.exit(1);
 }
+
+const distDir = path.dirname(distIndex);
+const migrateJs = path.join(distDir, "db", "migrate.js");
 
 if (fs.existsSync(migrateJs) && process.env.SKIP_MIGRATE_ON_START !== "true") {
   console.log("[server] Running migrations…");
@@ -34,5 +45,5 @@ if (fs.existsSync(migrateJs) && process.env.SKIP_MIGRATE_ON_START !== "true") {
   }
 }
 
-console.log("[server] Starting API on PORT=%s", process.env.PORT || "3000");
+console.log("[server] Starting API from %s (PORT=%s)", distIndex, process.env.PORT || "3000");
 require(distIndex);
