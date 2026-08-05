@@ -6,8 +6,31 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const pool_1 = require("./pool");
+function resolveMigrationsDir() {
+    const candidates = [
+        path_1.default.resolve(__dirname, "migrations"), // dist/db → wrong
+        path_1.default.resolve(__dirname, "../migrations"), // dist/migrations (Hostinger prepare)
+        path_1.default.resolve(__dirname, "../../migrations"), // apps/api/migrations (source layout)
+        path_1.default.resolve(__dirname, "../../apps/api/migrations"), // root dist → apps/api/migrations
+        path_1.default.resolve(process.cwd(), "apps/api/migrations"),
+        path_1.default.resolve(process.cwd(), "migrations"),
+        path_1.default.resolve(process.cwd(), "dist/migrations"),
+    ];
+    for (const dir of candidates) {
+        try {
+            if (fs_1.default.existsSync(dir) && fs_1.default.readdirSync(dir).some((f) => f.endsWith(".sql"))) {
+                return dir;
+            }
+        }
+        catch {
+            // try next
+        }
+    }
+    throw new Error(`Migrations folder not found. Looked in:\n${candidates.join("\n")}`);
+}
 async function migrate() {
-    const migrationsDir = path_1.default.resolve(__dirname, "../../migrations");
+    const migrationsDir = resolveMigrationsDir();
+    console.log(`[migrate] using ${migrationsDir}`);
     const files = fs_1.default
         .readdirSync(migrationsDir)
         .filter((f) => f.endsWith(".sql"))

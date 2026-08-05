@@ -6,9 +6,32 @@ exports.withTransaction = withTransaction;
 const pg_1 = require("pg");
 const config_1 = require("../config");
 const needsSsl = /supabase\.co/i.test(config_1.env.DATABASE_URL) ||
-    /[?&]sslmode=require/i.test(config_1.env.DATABASE_URL);
+    /[?&]sslmode=/i.test(config_1.env.DATABASE_URL);
+/**
+ * Newer `pg` treats sslmode=require like verify-full, which breaks on
+ * Hostinger→Supabase (self-signed chain). Strip sslmode from the URI and
+ * rely on explicit ssl: { rejectUnauthorized: false } instead.
+ */
+function connectionStringForPool(raw) {
+    try {
+        const url = new URL(raw);
+        url.searchParams.delete("sslmode");
+        url.searchParams.delete("uselibpqcompat");
+        // URL with empty search should not end with '?'
+        let out = url.toString();
+        if (out.endsWith("?"))
+            out = out.slice(0, -1);
+        return out;
+    }
+    catch {
+        return raw
+            .replace(/([?&])sslmode=[^&]*/g, "$1")
+            .replace(/[?&]$/, "")
+            .replace(/\?&/, "?");
+    }
+}
 exports.pool = new pg_1.Pool({
-    connectionString: config_1.env.DATABASE_URL,
+    connectionString: connectionStringForPool(config_1.env.DATABASE_URL),
     ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 async function query(text, params) {

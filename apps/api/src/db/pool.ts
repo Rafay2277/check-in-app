@@ -3,10 +3,32 @@ import { env } from "../config";
 
 const needsSsl =
   /supabase\.co/i.test(env.DATABASE_URL) ||
-  /[?&]sslmode=require/i.test(env.DATABASE_URL);
+  /[?&]sslmode=/i.test(env.DATABASE_URL);
+
+/**
+ * Newer `pg` treats sslmode=require like verify-full, which breaks on
+ * Hostinger→Supabase (self-signed chain). Strip sslmode from the URI and
+ * rely on explicit ssl: { rejectUnauthorized: false } instead.
+ */
+function connectionStringForPool(raw: string): string {
+  try {
+    const url = new URL(raw);
+    url.searchParams.delete("sslmode");
+    url.searchParams.delete("uselibpqcompat");
+    // URL with empty search should not end with '?'
+    let out = url.toString();
+    if (out.endsWith("?")) out = out.slice(0, -1);
+    return out;
+  } catch {
+    return raw
+      .replace(/([?&])sslmode=[^&]*/g, "$1")
+      .replace(/[?&]$/, "")
+      .replace(/\?&/, "?");
+  }
+}
 
 export const pool = new Pool({
-  connectionString: env.DATABASE_URL,
+  connectionString: connectionStringForPool(env.DATABASE_URL),
   ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 

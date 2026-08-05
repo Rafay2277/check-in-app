@@ -92,5 +92,7 @@ if (exists(migrateJs) && process.env.SKIP_MIGRATE_ON_START !== "true") {
   }
 }
 
-console.log("[server] Starting API from %s (PORT=%s)", distIndex, process.env.PORT || "3000");
+console.log(
+  `[server] Starting API from ${distIndex} (PORT=${process.env.PORT || "3000"})`
+);
 require(distIndex);

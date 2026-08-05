@@ -2,8 +2,36 @@ import fs from "fs";
 import path from "path";
 import { pool } from "./pool";
 
+function resolveMigrationsDir(): string {
+  const candidates = [
+    path.resolve(__dirname, "migrations"), // dist/db → wrong
+    path.resolve(__dirname, "../migrations"), // dist/migrations (Hostinger prepare)
+    path.resolve(__dirname, "../../migrations"), // apps/api/migrations (source layout)
+    path.resolve(__dirname, "../../apps/api/migrations"), // root dist → apps/api/migrations
+    path.resolve(process.cwd(), "apps/api/migrations"),
+    path.resolve(process.cwd(), "migrations"),
+    path.resolve(process.cwd(), "dist/migrations"),
+  ];
+
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(dir) && fs.readdirSync(dir).some((f) => f.endsWith(".sql"))) {
+        return dir;
+      }
+    } catch {
+      // try next
+    }
+  }
+
+  throw new Error(
+    `Migrations folder not found. Looked in:\n${candidates.join("\n")}`
+  );
+}
+
 async function migrate(): Promise<void> {
-  const migrationsDir = path.resolve(__dirname, "../../migrations");
+  const migrationsDir = resolveMigrationsDir();
+  console.log(`[migrate] using ${migrationsDir}`);
+
   const files = fs
     .readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))

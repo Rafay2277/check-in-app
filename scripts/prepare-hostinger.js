@@ -10,6 +10,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const apiDist = path.join(root, "apps", "api", "dist");
 const scannerSrc = path.join(root, "apps", "scanner");
+const migrationsSrc = path.join(root, "apps", "api", "migrations");
 const outDist = path.join(root, "dist");
 
 function exists(p) {
@@ -29,7 +30,9 @@ if (!exists(path.join(apiDist, "index.js"))) {
 fs.rmSync(outDist, { recursive: true, force: true });
 fs.cpSync(apiDist, outDist, { recursive: true });
 fs.cpSync(scannerSrc, path.join(outDist, "scanner"), { recursive: true });
+fs.cpSync(migrationsSrc, path.join(outDist, "migrations"), { recursive: true });
 
 console.log("[prepare-hostinger] Ready:");
 console.log("  ", path.join(outDist, "index.js"));
 console.log("  ", path.join(outDist, "scanner", "index.html"));
+console.log("  ", path.join(outDist, "migrations"));
