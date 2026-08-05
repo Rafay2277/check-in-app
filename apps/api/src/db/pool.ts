@@ -9,15 +9,22 @@ const needsSsl =
  * Newer `pg` treats sslmode=require like verify-full, which breaks on
  * Hostinger→Supabase (self-signed chain). Strip sslmode from the URI and
  * rely on explicit ssl: { rejectUnauthorized: false } instead.
+ *
+ * Also: use postgres: scheme for URL parsing (postgresql: is not always reliable).
  */
 function connectionStringForPool(raw: string): string {
+  const normalized = raw.replace(/^postgresql:/i, "postgres:");
   try {
-    const url = new URL(raw);
+    const url = new URL(normalized);
     url.searchParams.delete("sslmode");
     url.searchParams.delete("uselibpqcompat");
-    // URL with empty search should not end with '?'
+    // Keep username exactly as provided (pooler needs postgres.<projectRef>)
     let out = url.toString();
     if (out.endsWith("?")) out = out.slice(0, -1);
+    // Log non-secret connection target once
+    console.log(
+      `[db] connecting as user="${decodeURIComponent(url.username)}" host=${url.hostname} port=${url.port || "5432"}`
+    );
     return out;
   } catch {
     return raw

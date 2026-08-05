@@ -126,6 +126,18 @@ export async function drainOutboxOnce(): Promise<void> {
 
 let timer: NodeJS.Timeout | null = null;
 let running = false;
+/** Pause polling after auth/connectivity failures so we don't trip Supabase circuit breaker. */
+let pauseUntil = 0;
+let lastPauseLog = 0;
+
+function isDbAuthOrCircuitError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /password authentication failed/i.test(msg) ||
+    /ECIRCUITBREAKER/i.test(msg) ||
+    /too many authentication failures/i.test(msg)
+  );
+}
 
 export function startOutboxWorker(): void {
   if (timer) return;
@@ -136,9 +148,22 @@ export function startOutboxWorker(): void {
 
   timer = setInterval(() => {
     if (running) return;
+    if (Date.now() < pauseUntil) return;
     running = true;
     drainOutboxOnce()
-      .catch((err) => console.error("[outbox] tick error", err))
+      .catch((err) => {
+        console.error("[outbox] tick error", err);
+        if (isDbAuthOrCircuitError(err)) {
+          // Back off 5 minutes — fix DATABASE_URL in Hostinger, then restart
+          pauseUntil = Date.now() + 5 * 60_000;
+          if (Date.now() - lastPauseLog > 60_000) {
+            lastPauseLog = Date.now();
+            console.error(
+              "[outbox] DB auth/circuit failure — pausing outbox for 5 minutes. Check DATABASE_URL (pooler user must be postgres.<projectRef> and password URL-encoded)."
+            );
+          }
+        }
+      })
       .finally(() => {
         running = false;
       });
