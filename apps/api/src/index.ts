@@ -29,6 +29,11 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// Scanner dashboard is the primary surface on this host
+app.get("/", (_req, res) => {
+  res.redirect(302, "/scanner/");
+});
+
 app.use("/api/auth", authRouter);
 app.use("/api/checkin", checkinRouter);
 app.use("/api/staff", staffRouter);

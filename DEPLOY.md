@@ -66,28 +66,26 @@ cd apps/api && npm run build && DATABASE_URL="$DATABASE_URL" \
   npm run migrate
 ```
 
-## 3. Hostinger Node.js app (GitHub auto-deploy)
+## Hostinger build settings (required)
 
-Requires **Business** (or Cloud) plan with Node.js Web Apps.
-
-1. hPanel → **Websites** → **Add Website** → **Node.js web app**
-2. **Import Git repository** → **Connect with GitHub** → authorize the Hostinger GitHub App → select `checkin-app`
-3. Deploy settings:
+In hPanel → your Node site → **Settings & Redeploy** (or Build settings), use:
 
 | Setting | Value |
 | --- | --- |
-| Framework | Express (or Other) |
-| Branch | `main` |
-| Node.js version | **20** |
-| Root directory | leave **empty** (repo root) |
+| Framework | **Express** (not Other) |
+| Root directory | `./` or empty |
+| Node.js | **20.x** |
 | Build command | `npm run build` |
-| Entry file | `apps/api/dist/index.js` (or rely on `npm start` if offered) |
+| Output directory | leave **empty** (this is a server app, not static) |
+| Entry file | **`server.js`** |
 
-4. Add **Environment variables** (see below) → **Deploy**
-5. Every push to `main` rebuilds and restarts automatically
-6. Smoke test:
-   - `https://dashboard.nouraiz.com/health`
-   - `https://dashboard.nouraiz.com/scanner/` (staff PIN)
+Then **Redeploy**, open **Runtime logs**, and **Clear cache**.
+
+Smoke tests after deploy:
+
+- https://dashboard.nouraiz.com/health → `{"ok":true,...}`
+- https://dashboard.nouraiz.com/scanner/ → staff PIN screen
+- https://dashboard.nouraiz.com/ → redirects to `/scanner/`
 
 ## 4. Environment variables (Hostinger)
 

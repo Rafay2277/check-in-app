@@ -3,13 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "description": "Fourtillfour member check-in — API, staff scanner, Expo member app",
+  "main": "server.js",
   "engines": {
     "node": "20.x"
   },
   "scripts": {
     "build": "npm install --prefix apps/api --include=dev && npm run build --prefix apps/api",
-    "start": "npm run start --prefix apps/api",
+    "start": "node server.js",
     "migrate": "npm run migrate --prefix apps/api",
     "dev:api": "npm run dev --prefix apps/api"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
   }
 }
