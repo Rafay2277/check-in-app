@@ -11,12 +11,15 @@ const zod_1 = require("zod");
 dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), "../../.env") });
 dotenv_1.default.config();
 /**
- * Hostinger's env UI often silently drops long DATABASE_URL values that contain
- * %, @, !, #, etc. Prefer either a full DATABASE_URL, or split DB_* parts
- * (password can be the literal value — we encode it when building the URI).
+ * Hostinger often fails to persist DATABASE_URL (reserved/stripped on apply).
+ * Resolution order:
+ * 1) DATABASE_URL / POSTGRES_URL / SUPABASE_DB_URL
+ * 2) DB_USER + DB_PASSWORD + DB_HOST (+ DB_PORT/DB_NAME)
  */
 function resolveDatabaseUrl() {
-    const direct = process.env.DATABASE_URL?.trim();
+    const direct = process.env.DATABASE_URL?.trim() ||
+        process.env.POSTGRES_URL?.trim() ||
+        process.env.SUPABASE_DB_URL?.trim();
     if (direct)
         return direct;
     const user = process.env.DB_USER?.trim();
