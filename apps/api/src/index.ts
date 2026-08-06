@@ -36,6 +36,22 @@ app.get("/health", (_req, res) => {
   });
 });
 
+/** Live DB probe — use this to verify Hostinger DATABASE_URL without reading secrets. */
+app.get("/health/db", async (_req, res) => {
+  try {
+    const result = await pool.query<{ ok: number }>("SELECT 1 AS ok");
+    res.json({ ok: true, db: result.rows[0]?.ok === 1 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[health/db] failed", message);
+    res.status(503).json({
+      ok: false,
+      db: false,
+      error: message,
+    });
+  }
+});
+
 // Scanner dashboard is the primary surface on this host
 app.get("/", (_req, res) => {
   res.redirect(302, "/scanner/");

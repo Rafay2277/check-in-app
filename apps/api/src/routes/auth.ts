@@ -87,7 +87,17 @@ authRouter.post("/start", async (req, res) => {
       });
     } catch (err) {
       console.error("auth/start (skip OTP) failed", err);
-      res.status(500).json({ error: "Login failed" });
+      const msg = err instanceof Error ? err.message : String(err);
+      const dbAuth =
+        /password authentication failed/i.test(msg) ||
+        /ECIRCUITBREAKER/i.test(msg) ||
+        /too many authentication failures/i.test(msg);
+      res.status(500).json({
+        error: dbAuth
+          ? "Database connection failed — check DATABASE_URL on the server"
+          : "Login failed",
+        code: dbAuth ? "DB_AUTH_FAILED" : "LOGIN_FAILED",
+      });
     }
     return;
   }
