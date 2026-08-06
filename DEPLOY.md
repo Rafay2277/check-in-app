@@ -89,7 +89,11 @@ Smoke tests after deploy:
 
 ## 4. Environment variables (Hostinger)
 
-Set these in hPanel → Environment variables. Do **not** commit secrets.
+**Preferred on Hostinger:** create File Manager file  
+`domains/dashboard.nouraiz.com/private/checkin.env`  
+(copy from repo `hostinger.env.example`). Panel env vars often fail to save; this file survives redeploys.
+
+Optionally also set vars in hPanel → Environment variables. Do **not** commit secrets.
 
 | Variable | Example / notes |
 | --- | --- |

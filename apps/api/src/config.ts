@@ -1,9 +1,8 @@
 import path from "path";
-import dotenv from "dotenv";
 import { z } from "zod";
+import { loadEnvFiles } from "./loadEnv";
 
-dotenv.config({ path: path.resolve(process.cwd(), "../../.env") });
-dotenv.config();
+loadEnvFiles();
 
 /**
  * Hostinger often fails to persist DATABASE_URL (reserved/stripped on apply).
@@ -24,7 +23,15 @@ function resolveDatabaseUrl(): string | undefined {
   const port = process.env.DB_PORT?.trim() || "5432";
   const name = process.env.DB_NAME?.trim() || "postgres";
 
-  if (!user || !host) return undefined;
+  if (!user || !host) {
+    console.error(
+      "[env] DB missing. Have DB_USER=%s DB_HOST=%s DB_PASSWORD=%s (from panel or private/checkin.env)",
+      user ? "yes" : "no",
+      host ? "yes" : "no",
+      process.env.DB_PASSWORD ? "yes" : "no"
+    );
+    return undefined;
+  }
 
   const encUser = encodeURIComponent(user);
   const encPass = encodeURIComponent(password);

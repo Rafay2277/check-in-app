@@ -1,12 +1,12 @@
 export declare const env: {
     SKIP_SMS_OTP: boolean;
     MOCK_INTEGRATIONS: boolean;
+    DATABASE_URL: string;
     NODE_ENV: "development" | "test" | "production";
     PORT: number;
     HTTPS_PORT: number;
     PUBLIC_BASE_URL: string;
     PUBLIC_HTTPS_BASE_URL: string;
-    DATABASE_URL: string;
     JWT_ACCESS_SECRET: string;
     JWT_REFRESH_SECRET: string;
     ACCESS_TOKEN_TTL_SECONDS: number;

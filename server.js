@@ -6,6 +6,9 @@
  *  1) prefer committed ./dist
  *  2) search common alternate paths
  *  3) build on the fly if still missing
+ *
+ * Env: Hostinger panel often fails to persist env vars. We load
+ * domain/private/checkin.env (stable across redeploys) before migrate/start.
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
@@ -18,6 +21,46 @@ function exists(p) {
     return false;
   }
 }
+
+function loadHostingerEnv() {
+  try {
+    const dotenv = require("dotenv");
+    const candidates = [
+      process.env.ENV_FILE,
+      // From .../hbuilds/versions/<id>/nodejs → domain/private/checkin.env
+      path.resolve(__dirname, "../../../../private/checkin.env"),
+      path.resolve(process.cwd(), "../../../../private/checkin.env"),
+      path.resolve(__dirname, "../../../private/checkin.env"),
+      path.resolve(process.cwd(), "../../../private/checkin.env"),
+      path.resolve(__dirname, "../../private/checkin.env"),
+      path.resolve(__dirname, "../private/checkin.env"),
+      path.resolve(__dirname, "private/checkin.env"),
+      path.resolve(__dirname, ".env"),
+      path.resolve(process.cwd(), ".env"),
+    ].filter(Boolean);
+
+    const loaded = [];
+    for (const file of candidates) {
+      if (!exists(file)) continue;
+      const result = dotenv.config({ path: file, override: false });
+      if (!result.error) loaded.push(file);
+    }
+    if (loaded.length) {
+      console.log("[server] env file(s):", loaded.join(" | "));
+    } else {
+      console.warn(
+        "[server] no private/checkin.env found — create it via File Manager (see hostinger.env.example)"
+      );
+    }
+  } catch (err) {
+    console.warn(
+      "[server] dotenv load skipped:",
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+}
+
+loadHostingerEnv();
 
 function listDir(dir) {
   try {

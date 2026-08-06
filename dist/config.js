@@ -1,15 +1,10 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.env = void 0;
 exports.assertLiveIntegrationsConfigured = assertLiveIntegrationsConfigured;
-const path_1 = __importDefault(require("path"));
-const dotenv_1 = __importDefault(require("dotenv"));
 const zod_1 = require("zod");
-dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), "../../.env") });
-dotenv_1.default.config();
+const loadEnv_1 = require("./loadEnv");
+(0, loadEnv_1.loadEnvFiles)();
 /**
  * Hostinger often fails to persist DATABASE_URL (reserved/stripped on apply).
  * Resolution order:
@@ -27,8 +22,10 @@ function resolveDatabaseUrl() {
     const host = process.env.DB_HOST?.trim();
     const port = process.env.DB_PORT?.trim() || "5432";
     const name = process.env.DB_NAME?.trim() || "postgres";
-    if (!user || !host)
+    if (!user || !host) {
+        console.error("[env] DB missing. Have DB_USER=%s DB_HOST=%s DB_PASSWORD=%s (from panel or private/checkin.env)", user ? "yes" : "no", host ? "yes" : "no", process.env.DB_PASSWORD ? "yes" : "no");
         return undefined;
+    }
     const encUser = encodeURIComponent(user);
     const encPass = encodeURIComponent(password);
     return `postgresql://${encUser}:${encPass}@${host}:${port}/${name}`;
