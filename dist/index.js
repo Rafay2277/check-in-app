@@ -35,7 +35,8 @@ app.get("/health", (_req, res) => {
         httpsPort: config_1.env.HTTPS_PORT,
     });
 });
-/** Live DB probe — use this to verify Hostinger DATABASE_URL without reading secrets. */
+/** Live DB probe — use this to verify Hostinger DATABASE_URL without reading secrets.
+ * Always HTTP 200 so Hostinger's CDN 503 (app down) is not confused with "DB bad". */
 app.get("/health/db", async (_req, res) => {
     try {
         const result = await pool_1.pool.query("SELECT 1 AS ok");
@@ -44,7 +45,7 @@ app.get("/health/db", async (_req, res) => {
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         console.error("[health/db] failed", message);
-        res.status(503).json({
+        res.json({
             ok: false,
             db: false,
             error: message,
