@@ -95,7 +95,14 @@ Set these in hPanel → Environment variables. Do **not** commit secrets.
 | --- | --- |
 | `NODE_ENV` | `production` |
 | `PUBLIC_BASE_URL` | `https://dashboard.nouraiz.com` |
-| `DATABASE_URL` | Supabase URI with `sslmode=require` (project `oimnlcqzyrcwonohccku`) |
+| `DATABASE_URL` | Full Supabase URI (may fail to save on Hostinger if password has `@` `%` `!`) |
+| **or split (recommended on Hostinger)** | |
+| `DB_USER` | `postgres.oimnlcqzyrcwonohccku` |
+| `DB_PASSWORD` | literal DB password (no URL encoding) |
+| `DB_HOST` | `aws-0-eu-north-1.pooler.supabase.com` |
+| `DB_PORT` | `5432` |
+| `DB_NAME` | `postgres` |
+| `SKIP_MIGRATE_ON_START` | `true` after schema exists |
 | `JWT_ACCESS_SECRET` | long random string (16+ chars) |
 | `JWT_REFRESH_SECRET` | long random string (16+ chars) |
 | `STAFF_PIN` | staff scanner PIN |

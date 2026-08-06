@@ -5,6 +5,34 @@ import { z } from "zod";
 dotenv.config({ path: path.resolve(process.cwd(), "../../.env") });
 dotenv.config();
 
+/**
+ * Hostinger's env UI often silently drops long DATABASE_URL values that contain
+ * %, @, !, #, etc. Prefer either a full DATABASE_URL, or split DB_* parts
+ * (password can be the literal value — we encode it when building the URI).
+ */
+function resolveDatabaseUrl(): string | undefined {
+  const direct = process.env.DATABASE_URL?.trim();
+  if (direct) return direct;
+
+  const user = process.env.DB_USER?.trim();
+  const password = process.env.DB_PASSWORD ?? "";
+  const host = process.env.DB_HOST?.trim();
+  const port = process.env.DB_PORT?.trim() || "5432";
+  const name = process.env.DB_NAME?.trim() || "postgres";
+
+  if (!user || !host) return undefined;
+
+  const encUser = encodeURIComponent(user);
+  const encPass = encodeURIComponent(password);
+  return `postgresql://${encUser}:${encPass}@${host}:${port}/${name}`;
+}
+
+// Normalize before Zod so either DATABASE_URL or DB_* parts work
+const resolvedDbUrl = resolveDatabaseUrl();
+if (resolvedDbUrl) {
+  process.env.DATABASE_URL = resolvedDbUrl;
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
@@ -44,6 +72,9 @@ const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
   console.error("Invalid environment configuration:", parsed.error.flatten().fieldErrors);
+  console.error(
+    "Tip: If Hostinger won't save DATABASE_URL, set DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME instead."
+  );
   process.exit(1);
 }
 
