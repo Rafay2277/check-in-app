@@ -33,16 +33,20 @@
   const lookupResults = document.getElementById("lookupResults");
   const lookupHint = document.getElementById("lookupHint");
   const lookupError = document.getElementById("lookupError");
+  const wedgeDock = document.getElementById("wedgeDock");
+  const wedgeInput = document.getElementById("wedgeInput");
 
   let staffToken = sessionStorage.getItem(STAFF_TOKEN_KEY) || "";
   let stream = null;
   let rafId = 0;
   let scanning = false;
   let lastScanAt = 0;
+  let validating = false;
   let activeTab = "scan";
   let analyticsDetail = "today";
   let lookupTimer = null;
   let lookupSeq = 0;
+  let wedgeRefocusTimer = null;
 
   const apiBase = ""; // same Express host
 
@@ -64,6 +68,33 @@
     setTab(tab);
   }
 
+  function focusWedge(force = false) {
+    if (!wedgeInput || staffShell.hidden || activeTab !== "scan") return;
+    const active = document.activeElement;
+    if (
+      !force &&
+      active &&
+      active !== document.body &&
+      active !== wedgeInput &&
+      (active.tagName === "INPUT" ||
+        active.tagName === "TEXTAREA" ||
+        active.tagName === "SELECT" ||
+        active.isContentEditable)
+    ) {
+      return;
+    }
+    try {
+      wedgeInput.focus({ preventScroll: true });
+    } catch {
+      wedgeInput.focus();
+    }
+  }
+
+  function scheduleWedgeRefocus(delayMs = 80) {
+    clearTimeout(wedgeRefocusTimer);
+    wedgeRefocusTimer = setTimeout(() => focusWedge(true), delayMs);
+  }
+
   function setTab(tab) {
     activeTab = tab;
     document.querySelectorAll(".rail-tab").forEach((btn) => {
@@ -72,6 +103,7 @@
 
     analyticsScreen.hidden = tab !== "analytics";
     lookupScreen.hidden = tab !== "lookup";
+    if (wedgeDock) wedgeDock.hidden = tab !== "scan";
 
     if (tab === "scan") {
       if (resultScreen.hidden) {
@@ -83,6 +115,7 @@
         scanScreen.hidden = true;
         resultScreen.hidden = false;
       }
+      scheduleWedgeRefocus(50);
     } else {
       stopCamera();
       scanScreen.hidden = true;
@@ -105,9 +138,13 @@
     scanScreen.hidden = true;
     resultScreen.hidden = false;
     activeTab = "scan";
+    if (wedgeDock) wedgeDock.hidden = false;
     document.querySelectorAll(".rail-tab").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tab === "scan");
     });
+    if (wedgeInput) wedgeInput.value = "";
+    // Keep hardware scanner ready for the next card without clicking "Scan next"
+    scheduleWedgeRefocus(120);
   }
 
   async function unlock(pin) {
@@ -229,17 +266,27 @@
 
   async function onDetected(raw) {
     const now = Date.now();
-    if (now - lastScanAt < 1500) return;
+    if (validating) return;
+    if (now - lastScanAt < 1200) return;
     lastScanAt = now;
 
     const token = extractUuid(raw);
     if (!token) {
-      scanHint.textContent = "QR found, but not a check-in code";
+      if (scanScreen.hidden === false) {
+        scanHint.textContent = "QR found, but not a check-in code";
+      } else {
+        showResult(false, "Not a check-in code — expected a token UUID");
+      }
+      if (wedgeInput) wedgeInput.value = "";
+      scheduleWedgeRefocus(80);
       return;
     }
 
+    validating = true;
     scanning = false;
-    scanHint.textContent = "Validating…";
+    if (!scanScreen.hidden) {
+      scanHint.textContent = "Validating…";
+    }
 
     try {
       const result = await validateToken(token);
@@ -266,7 +313,17 @@
       }
     } catch (err) {
       showResult(false, err.message || "Network error");
+    } finally {
+      validating = false;
+      if (wedgeInput) wedgeInput.value = "";
+      scheduleWedgeRefocus(150);
     }
+  }
+
+  function submitWedgeScan() {
+    const raw = (wedgeInput?.value || "").trim();
+    if (!raw) return;
+    onDetected(raw);
   }
 
   function tick() {
@@ -518,6 +575,7 @@
       resultScreen.hidden = true;
       showStaff("scan");
       await startCamera();
+      scheduleWedgeRefocus(80);
     } catch (err) {
       pinError.hidden = false;
       pinError.textContent = err.message || "Unlock failed";
@@ -540,6 +598,42 @@
     } catch (err) {
       scanHint.textContent = err.message || "Camera permission required";
     }
+    scheduleWedgeRefocus(80);
+  });
+
+  if (wedgeInput) {
+    wedgeInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      submitWedgeScan();
+    });
+
+    // Some scanners fire a form-like submit; also catch input ending with newline
+    wedgeInput.addEventListener("input", () => {
+      const v = wedgeInput.value;
+      if (v.includes("\n") || v.includes("\r")) {
+        wedgeInput.value = v.replace(/[\r\n]+/g, "");
+        submitWedgeScan();
+      }
+    });
+  }
+
+  // If focus drifts off the wedge while on the Scan tab, pull it back
+  // (unless staff clicked another real field — we only reclaim from body/buttons).
+  document.addEventListener("focusin", (e) => {
+    if (staffShell.hidden || activeTab !== "scan") return;
+    const t = e.target;
+    if (t === wedgeInput) return;
+    if (
+      t &&
+      (t.tagName === "INPUT" ||
+        t.tagName === "TEXTAREA" ||
+        t.tagName === "SELECT" ||
+        t.isContentEditable)
+    ) {
+      return;
+    }
+    scheduleWedgeRefocus(60);
   });
 
   rangeForm.addEventListener("submit", (e) => {
@@ -585,6 +679,7 @@
     startCamera().catch((err) => {
       scanHint.textContent = err.message || "Camera permission required";
     });
+    scheduleWedgeRefocus(100);
   } else {
     showPin();
   }

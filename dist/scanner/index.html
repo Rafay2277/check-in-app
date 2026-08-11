@@ -62,6 +62,25 @@
           </button>
         </nav>
 
+        <div id="wedgeDock" class="wedge-dock">
+          <label class="field-label" for="wedgeInput">Hardware scanner</label>
+          <input
+            id="wedgeInput"
+            class="wedge-input"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+            spellcheck="false"
+            placeholder="Scan card here — or paste token + Enter to test"
+          />
+          <p class="meta-line wedge-help">
+            USB/Bluetooth scanners type into this field automatically. Camera
+            scanning still works above.
+          </p>
+        </div>
+
         <section id="scanScreen" class="screen panel" data-panel="scan">
           <div class="viewport-wrap">
             <video id="video" playsinline muted></video>
