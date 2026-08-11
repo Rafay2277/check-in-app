@@ -114,6 +114,53 @@ export async function searchGhlContacts(
   return data.contacts ?? [];
 }
 
+export async function getGhlPointsTotal(
+  ghlContactId: string
+): Promise<number | null> {
+  if (env.MOCK_INTEGRATIONS) {
+    return null;
+  }
+
+  const res = await fetch(`${env.GHL_API_BASE_URL}/contacts/${ghlContactId}`, {
+    method: "GET",
+    headers: ghlHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`GHL get contact failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as {
+    contact?: {
+      customFields?: Array<{
+        id?: string;
+        key?: string;
+        fieldKey?: string;
+        value?: unknown;
+        field_value?: unknown;
+      }>;
+    };
+  };
+
+  const fields = data.contact?.customFields ?? [];
+  const fieldId = env.GHL_POINTS_FIELD_ID?.trim();
+  const fieldKey = normalizePointsFieldKey(env.GHL_POINTS_FIELD_KEY || "");
+
+  const match = fields.find((f) => {
+    if (fieldId && f.id === fieldId) return true;
+    if (fieldKey && (f.key === fieldKey || f.fieldKey === fieldKey)) return true;
+    return false;
+  });
+
+  if (!match) return null;
+
+  const raw = match.value ?? match.field_value;
+  const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.floor(n);
+}
+
 export async function updateGhlPointsTotal(
   ghlContactId: string,
   pointsTotal: number

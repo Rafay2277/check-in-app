@@ -59,12 +59,20 @@ exports.analyticsRouter.get("/summary", async (req, res) => {
         return;
     }
     try {
-        const countUsed = async (from, to) => {
-            const { rows } = await (0, pool_1.query)(`SELECT COUNT(*)::text AS count
-         FROM checkin_tokens
-         WHERE status = 'used'
-           AND used_at >= $1
-           AND used_at < $2`, [from, to]);
+        /** Approved = rotating used tokens + permanent daily_checkins */
+        const countApproved = async (from, to) => {
+            const { rows } = await (0, pool_1.query)(`SELECT (
+           (SELECT COUNT(*)::int
+            FROM checkin_tokens
+            WHERE status = 'used'
+              AND used_at >= $1
+              AND used_at < $2)
+           +
+           (SELECT COUNT(*)::int
+            FROM daily_checkins
+            WHERE created_at >= $1
+              AND created_at < $2)
+         )::text AS count`, [from, to]);
             return Number(rows[0]?.count ?? 0);
         };
         const countRejected = async (from, to) => {
@@ -76,29 +84,49 @@ exports.analyticsRouter.get("/summary", async (req, res) => {
             return Number(rows[0]?.count ?? 0);
         };
         const listCheckins = async (from, to) => {
-            const { rows } = await (0, pool_1.query)(`SELECT
-           ct.id AS token_id,
-           ct.used_at,
-           m.id AS member_id,
-           m.name,
-           m.phone_number,
-           m.points_total,
-           m.ghl_contact_id
-         FROM checkin_tokens ct
-         INNER JOIN members m ON m.id = ct.member_id
-         WHERE ct.status = 'used'
-           AND ct.used_at >= $1
-           AND ct.used_at < $2
-         ORDER BY ct.used_at DESC
+            const { rows } = await (0, pool_1.query)(`SELECT * FROM (
+           SELECT
+             ct.id::text AS event_id,
+             ct.used_at AS checked_in_at,
+             m.id AS member_id,
+             m.name,
+             m.phone_number,
+             m.points_total,
+             m.ghl_contact_id,
+             'rotating'::text AS token_kind
+           FROM checkin_tokens ct
+           INNER JOIN members m ON m.id = ct.member_id
+           WHERE ct.status = 'used'
+             AND ct.used_at >= $1
+             AND ct.used_at < $2
+
+           UNION ALL
+
+           SELECT
+             dc.id::text AS event_id,
+             dc.created_at AS checked_in_at,
+             m.id AS member_id,
+             m.name,
+             m.phone_number,
+             m.points_total,
+             m.ghl_contact_id,
+             'permanent'::text AS token_kind
+           FROM daily_checkins dc
+           INNER JOIN members m ON m.id = dc.member_id
+           WHERE dc.created_at >= $1
+             AND dc.created_at < $2
+         ) events
+         ORDER BY checked_in_at DESC
          LIMIT 250`, [from, to]);
             return rows.map((r) => ({
-                id: r.token_id,
+                id: r.event_id,
                 memberId: r.member_id,
                 name: r.name,
                 phoneNumber: r.phone_number,
                 pointsTotal: r.points_total,
                 ghlContactId: r.ghl_contact_id,
-                checkedInAt: r.used_at.toISOString(),
+                checkedInAt: r.checked_in_at.toISOString(),
+                tokenKind: r.token_kind,
             }));
         };
         const toExclusive = new Date(now.getTime() + 1);
@@ -113,22 +141,32 @@ exports.analyticsRouter.get("/summary", async (req, res) => {
                     : customFrom;
         const detailTo = detail === "range" ? rangeToExclusive : toExclusive;
         const [today, week, month, rangeApproved, todayRejected, weekRejected, monthRejected, rangeRejected, dailyRows, checkins,] = await Promise.all([
-            countUsed(todayStart, toExclusive),
-            countUsed(weekStart, toExclusive),
-            countUsed(monthStart, toExclusive),
-            countUsed(customFrom, rangeToExclusive),
+            countApproved(todayStart, toExclusive),
+            countApproved(weekStart, toExclusive),
+            countApproved(monthStart, toExclusive),
+            countApproved(customFrom, rangeToExclusive),
             countRejected(todayStart, toExclusive),
             countRejected(weekStart, toExclusive),
             countRejected(monthStart, toExclusive),
             countRejected(customFrom, rangeToExclusive),
-            (0, pool_1.query)(`SELECT to_char(date_trunc('day', used_at), 'YYYY-MM-DD') AS day,
-                COUNT(*)::text AS count
-         FROM checkin_tokens
-         WHERE status = 'used'
-           AND used_at >= $1
-           AND used_at < $2
-         GROUP BY 1
-         ORDER BY 1 ASC`, [customFrom, rangeToExclusive]),
+            (0, pool_1.query)(`SELECT day, SUM(cnt)::text AS count FROM (
+           SELECT to_char(date_trunc('day', used_at), 'YYYY-MM-DD') AS day,
+                  COUNT(*)::int AS cnt
+           FROM checkin_tokens
+           WHERE status = 'used'
+             AND used_at >= $1
+             AND used_at < $2
+           GROUP BY 1
+           UNION ALL
+           SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS day,
+                  COUNT(*)::int AS cnt
+           FROM daily_checkins
+           WHERE created_at >= $1
+             AND created_at < $2
+           GROUP BY 1
+         ) x
+         GROUP BY day
+         ORDER BY day ASC`, [customFrom, rangeToExclusive]),
             listCheckins(detailFrom, detailTo),
         ]);
         res.json({

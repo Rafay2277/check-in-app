@@ -5,6 +5,7 @@ import { env } from "../config";
 import { query, withTransaction } from "../db/pool";
 import { signStaffToken } from "../lib/tokens";
 import { AuthedRequest, requireStaffAuth } from "../middleware/auth";
+import { getGhlPointsTotal } from "../integrations/ghl";
 import { drainOutboxOnce } from "../worker/outbox";
 
 export const staffRouter = Router();
@@ -59,8 +60,20 @@ async function awardPointAndOutbox(
   client: PoolClient,
   memberId: string,
   dedupeKey: string,
-  extraPayload: Record<string, unknown>
+  extraPayload: Record<string, unknown>,
+  /** When set, raise local points to at least this GHL total before +1. */
+  ghlPointsFloor: number | null = null
 ): Promise<{ id: string; name: string; pointsTotal: number; ghlContactId: string }> {
+  if (ghlPointsFloor != null && ghlPointsFloor >= 0) {
+    await client.query(
+      `UPDATE members
+       SET points_total = GREATEST(points_total, $2),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [memberId, ghlPointsFloor]
+    );
+  }
+
   const { rows: memberRows } = await client.query<{
     id: string;
     name: string;
@@ -103,10 +116,20 @@ async function awardPointAndOutbox(
   };
 }
 
+async function readGhlPointsFloor(ghlContactId: string): Promise<number | null> {
+  try {
+    return await getGhlPointsTotal(ghlContactId);
+  } catch (err) {
+    console.warn("[validate] could not read GHL points; continuing with local total", err);
+    return null;
+  }
+}
+
 /** Existing app QR: single-use, 15-minute TTL. Unchanged CAS semantics. */
 async function tryValidateRotating(
   client: PoolClient,
-  token: string
+  token: string,
+  ghlPointsFloor: number | null
 ): Promise<ValidateOk | null> {
   const { rows } = await client.query<{
     member_id: string;
@@ -128,7 +151,8 @@ async function tryValidateRotating(
     client,
     memberId,
     `award_ghl_point:${tokenId}`,
-    { checkinTokenId: tokenId, tokenKind: "rotating" }
+    { checkinTokenId: tokenId, tokenKind: "rotating" },
+    ghlPointsFloor
   );
 
   return {
@@ -148,7 +172,8 @@ async function tryValidateRotating(
  */
 async function tryValidatePermanent(
   client: PoolClient,
-  token: string
+  token: string,
+  ghlPointsFloor: number | null
 ): Promise<ValidateOk | ValidateFail | null> {
   const { rows: tokenRows } = await client.query<{
     id: string;
@@ -207,7 +232,8 @@ async function tryValidatePermanent(
         dailyCheckinId: dailyId,
         checkinDate,
         tokenKind: "permanent",
-      }
+      },
+      ghlPointsFloor
     );
 
     return {
@@ -229,6 +255,26 @@ async function tryValidatePermanent(
     }
     throw err;
   }
+}
+
+async function previewGhlPointsFloor(token: string): Promise<number | null> {
+  const { rows } = await query<{ ghl_contact_id: string }>(
+    `SELECT m.ghl_contact_id
+     FROM permanent_checkin_tokens p
+     INNER JOIN members m ON m.id = p.member_id
+     WHERE p.token = $1::uuid
+     UNION ALL
+     SELECT m.ghl_contact_id
+     FROM checkin_tokens c
+     INNER JOIN members m ON m.id = c.member_id
+     WHERE c.token = $1::uuid
+       AND c.status = 'unused'
+       AND c.created_at > NOW() - INTERVAL '15 minutes'
+     LIMIT 1`,
+    [token]
+  );
+  if (!rows[0]?.ghl_contact_id) return null;
+  return readGhlPointsFloor(rows[0].ghl_contact_id);
 }
 
 staffRouter.post("/session", (req, res) => {
@@ -269,11 +315,21 @@ staffRouter.post(
     }
 
     try {
+      const ghlPointsFloor = await previewGhlPointsFloor(parsed.data.token);
+
       const result = await withTransaction(async (client) => {
-        const rotating = await tryValidateRotating(client, parsed.data.token);
+        const rotating = await tryValidateRotating(
+          client,
+          parsed.data.token,
+          ghlPointsFloor
+        );
         if (rotating) return rotating;
 
-        const permanent = await tryValidatePermanent(client, parsed.data.token);
+        const permanent = await tryValidatePermanent(
+          client,
+          parsed.data.token,
+          ghlPointsFloor
+        );
         if (permanent) return permanent;
 
         return {

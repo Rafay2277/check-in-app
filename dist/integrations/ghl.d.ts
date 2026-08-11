@@ -13,6 +13,7 @@ export declare function findGhlContactByPhone(phoneE164: string): Promise<GhlCon
  * Read-only; used by staff scanner lookup.
  */
 export declare function searchGhlContacts(q: string, limit?: number): Promise<GhlContact[]>;
+export declare function getGhlPointsTotal(ghlContactId: string): Promise<number | null>;
 export declare function updateGhlPointsTotal(ghlContactId: string, pointsTotal: number): Promise<void>;
 export declare function addGhlCheckinNote(ghlContactId: string, pointsTotal: number): Promise<void>;
 export {};

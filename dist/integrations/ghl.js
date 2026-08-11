@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizePointsFieldKey = normalizePointsFieldKey;
 exports.findGhlContactByPhone = findGhlContactByPhone;
 exports.searchGhlContacts = searchGhlContacts;
+exports.getGhlPointsTotal = getGhlPointsTotal;
 exports.updateGhlPointsTotal = updateGhlPointsTotal;
 exports.addGhlCheckinNote = addGhlCheckinNote;
 const config_1 = require("../config");
@@ -89,6 +90,37 @@ async function searchGhlContacts(q, limit = 10) {
     }
     const data = (await res.json());
     return data.contacts ?? [];
+}
+async function getGhlPointsTotal(ghlContactId) {
+    if (config_1.env.MOCK_INTEGRATIONS) {
+        return null;
+    }
+    const res = await fetch(`${config_1.env.GHL_API_BASE_URL}/contacts/${ghlContactId}`, {
+        method: "GET",
+        headers: ghlHeaders(),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`GHL get contact failed (${res.status}): ${text}`);
+    }
+    const data = (await res.json());
+    const fields = data.contact?.customFields ?? [];
+    const fieldId = config_1.env.GHL_POINTS_FIELD_ID?.trim();
+    const fieldKey = normalizePointsFieldKey(config_1.env.GHL_POINTS_FIELD_KEY || "");
+    const match = fields.find((f) => {
+        if (fieldId && f.id === fieldId)
+            return true;
+        if (fieldKey && (f.key === fieldKey || f.fieldKey === fieldKey))
+            return true;
+        return false;
+    });
+    if (!match)
+        return null;
+    const raw = match.value ?? match.field_value;
+    const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+    if (!Number.isFinite(n) || n < 0)
+        return null;
+    return Math.floor(n);
 }
 async function updateGhlPointsTotal(ghlContactId, pointsTotal) {
     if (config_1.env.MOCK_INTEGRATIONS) {

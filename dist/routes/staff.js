@@ -7,6 +7,7 @@ const config_1 = require("../config");
 const pool_1 = require("../db/pool");
 const tokens_1 = require("../lib/tokens");
 const auth_1 = require("../middleware/auth");
+const ghl_1 = require("../integrations/ghl");
 const outbox_1 = require("../worker/outbox");
 exports.staffRouter = (0, express_1.Router)();
 const pinSchema = zod_1.z.object({
@@ -29,7 +30,15 @@ async function logScanAttempt(result, reason, token) {
         console.warn("scan_attempts log failed", err);
     }
 }
-async function awardPointAndOutbox(client, memberId, dedupeKey, extraPayload) {
+async function awardPointAndOutbox(client, memberId, dedupeKey, extraPayload, 
+/** When set, raise local points to at least this GHL total before +1. */
+ghlPointsFloor = null) {
+    if (ghlPointsFloor != null && ghlPointsFloor >= 0) {
+        await client.query(`UPDATE members
+       SET points_total = GREATEST(points_total, $2),
+           updated_at = NOW()
+       WHERE id = $1`, [memberId, ghlPointsFloor]);
+    }
     const { rows: memberRows } = await client.query(`UPDATE members
      SET points_total = points_total + 1,
          updated_at = NOW()
@@ -57,8 +66,17 @@ async function awardPointAndOutbox(client, memberId, dedupeKey, extraPayload) {
         ghlContactId: member.ghl_contact_id,
     };
 }
+async function readGhlPointsFloor(ghlContactId) {
+    try {
+        return await (0, ghl_1.getGhlPointsTotal)(ghlContactId);
+    }
+    catch (err) {
+        console.warn("[validate] could not read GHL points; continuing with local total", err);
+        return null;
+    }
+}
 /** Existing app QR: single-use, 15-minute TTL. Unchanged CAS semantics. */
-async function tryValidateRotating(client, token) {
+async function tryValidateRotating(client, token, ghlPointsFloor) {
     const { rows } = await client.query(`UPDATE checkin_tokens
      SET status = 'used', used_at = NOW()
      WHERE token = $1::uuid
@@ -68,7 +86,7 @@ async function tryValidateRotating(client, token) {
     if (rows.length === 0)
         return null;
     const { member_id: memberId, token_id: tokenId } = rows[0];
-    const member = await awardPointAndOutbox(client, memberId, `award_ghl_point:${tokenId}`, { checkinTokenId: tokenId, tokenKind: "rotating" });
+    const member = await awardPointAndOutbox(client, memberId, `award_ghl_point:${tokenId}`, { checkinTokenId: tokenId, tokenKind: "rotating" }, ghlPointsFloor);
     return {
         approved: true,
         tokenKind: "rotating",
@@ -83,7 +101,7 @@ async function tryValidateRotating(client, token) {
  * Permanent test cards: reusable until deactivated.
  * Daily limit via unique (member_id, checkin_date) in daily_checkins.
  */
-async function tryValidatePermanent(client, token) {
+async function tryValidatePermanent(client, token, ghlPointsFloor) {
     const { rows: tokenRows } = await client.query(`SELECT id, member_id, active
      FROM permanent_checkin_tokens
      WHERE token = $1::uuid
@@ -118,7 +136,7 @@ async function tryValidatePermanent(client, token) {
             dailyCheckinId: dailyId,
             checkinDate,
             tokenKind: "permanent",
-        });
+        }, ghlPointsFloor);
         return {
             approved: true,
             tokenKind: "permanent",
@@ -139,6 +157,23 @@ async function tryValidatePermanent(client, token) {
         }
         throw err;
     }
+}
+async function previewGhlPointsFloor(token) {
+    const { rows } = await (0, pool_1.query)(`SELECT m.ghl_contact_id
+     FROM permanent_checkin_tokens p
+     INNER JOIN members m ON m.id = p.member_id
+     WHERE p.token = $1::uuid
+     UNION ALL
+     SELECT m.ghl_contact_id
+     FROM checkin_tokens c
+     INNER JOIN members m ON m.id = c.member_id
+     WHERE c.token = $1::uuid
+       AND c.status = 'unused'
+       AND c.created_at > NOW() - INTERVAL '15 minutes'
+     LIMIT 1`, [token]);
+    if (!rows[0]?.ghl_contact_id)
+        return null;
+    return readGhlPointsFloor(rows[0].ghl_contact_id);
 }
 exports.staffRouter.post("/session", (req, res) => {
     const parsed = pinSchema.safeParse(req.body);
@@ -171,11 +206,12 @@ exports.staffRouter.post("/validate", auth_1.requireStaffAuth, async (req, res) 
         return;
     }
     try {
+        const ghlPointsFloor = await previewGhlPointsFloor(parsed.data.token);
         const result = await (0, pool_1.withTransaction)(async (client) => {
-            const rotating = await tryValidateRotating(client, parsed.data.token);
+            const rotating = await tryValidateRotating(client, parsed.data.token, ghlPointsFloor);
             if (rotating)
                 return rotating;
-            const permanent = await tryValidatePermanent(client, parsed.data.token);
+            const permanent = await tryValidatePermanent(client, parsed.data.token, ghlPointsFloor);
             if (permanent)
                 return permanent;
             return {
