@@ -77,6 +77,8 @@ const envSchema = z.object({
   GHL_POINTS_FIELD_ID: z.string().optional().default(""),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().default(3000),
   OUTBOX_MAX_ATTEMPTS: z.coerce.number().default(8),
+  /** Calendar day for permanent-card daily limit (IANA tz). */
+  CHECKIN_CALENDAR_TZ: z.string().default("America/Los_Angeles"),
 });
 
 const parsed = envSchema.safeParse(process.env);

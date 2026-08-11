@@ -24,5 +24,6 @@ export declare const env: {
     GHL_POINTS_FIELD_ID: string;
     OUTBOX_POLL_INTERVAL_MS: number;
     OUTBOX_MAX_ATTEMPTS: number;
+    CHECKIN_CALENDAR_TZ: string;
 };
 export declare function assertLiveIntegrationsConfigured(): void;

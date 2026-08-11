@@ -94,12 +94,13 @@
     }
   }
 
-  function showResult(approved, detail) {
+  function showResult(approved, detail, titleOverride) {
     stopCamera();
     resultCard.classList.toggle("ok", approved);
     resultCard.classList.toggle("bad", !approved);
-    resultIcon.textContent = approved ? "Scan result" : "Scan result";
-    resultTitle.textContent = approved ? "Approved" : "Not valid";
+    resultIcon.textContent = "Scan result";
+    resultTitle.textContent =
+      titleOverride || (approved ? "Approved" : "Not valid");
     resultDetail.textContent = detail || "";
     scanScreen.hidden = true;
     resultScreen.hidden = false;
@@ -250,12 +251,18 @@
       if (result.ok) {
         const name = result.data.member?.name || "Member";
         const pts = result.data.member?.pointsTotal;
+        const kind =
+          result.data.tokenKind === "permanent" ? "card" : "app QR";
         showResult(
           true,
-          `${name} · ${pts} pts — apply Loyalty Comp on Square`
+          `${name} · ${pts} pts (${kind}) — apply Loyalty Comp on Square`
         );
       } else {
-        showResult(false, result.data.error || "Token rejected");
+        const code = result.data.code;
+        let title = "Not valid";
+        if (code === "already_checked_in_today") title = "Already checked in";
+        else if (code === "card_deactivated") title = "Card deactivated";
+        showResult(false, result.data.error || "Token rejected", title);
       }
     } catch (err) {
       showResult(false, err.message || "Network error");
