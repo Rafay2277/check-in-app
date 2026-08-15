@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Francois+One&family=Montserrat:wght@400;500;600;700&family=PT+Serif:wght@400;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260816" />
   </head>
   <body>
     <div class="atmosphere" aria-hidden="true"></div>
@@ -27,14 +27,13 @@
       <section id="pinScreen" class="screen screen-pin">
         <div class="pin-copy">
           <p class="eyebrow">Cafe + car club</p>
-          <h1>Unlock the counter</h1>
+          <h1>Staff access</h1>
           <p class="lede">
-            Shared shift PIN for scanning members, reviewing check-ins, and looking
-            up accounts.
+            Enter the PIN to scan member check-ins and look up accounts.
           </p>
         </div>
         <form id="pinForm" class="pin-form" autocomplete="off">
-          <label class="field-label" for="pinInput">Shift PIN</label>
+          <label class="field-label" for="pinInput">PIN</label>
           <input
             id="pinInput"
             type="password"
@@ -44,7 +43,7 @@
             placeholder="••••"
             required
           />
-          <button type="submit" class="btn-primary">Start shift</button>
+          <button type="submit" class="btn-primary">Unlock</button>
         </form>
         <p id="pinError" class="error" hidden></p>
       </section>
@@ -94,7 +93,7 @@
             </div>
           </div>
           <p class="hint center" id="scanHint">Hold the member QR in the frame</p>
-          <button id="stopBtn" type="button" class="btn-ghost">End shift</button>
+          <button id="stopBtn" type="button" class="btn-ghost">Lock</button>
         </section>
 
         <section
@@ -210,6 +209,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=20260816"></script>
   </body>
 </html>

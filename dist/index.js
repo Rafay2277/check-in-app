@@ -71,7 +71,14 @@ const scannerCandidates = [
 const scannerDir = scannerCandidates.find((dir) => fs_1.default.existsSync(path_1.default.join(dir, "index.html"))) ??
     scannerCandidates[0];
 console.log(`[static] scanner dir: ${scannerDir}`);
-app.use("/scanner", express_1.default.static(scannerDir, { index: "index.html" }));
+app.use("/scanner", express_1.default.static(scannerDir, {
+    index: "index.html",
+    etag: false,
+    lastModified: false,
+    setHeaders(res) {
+        res.setHeader("Cache-Control", "no-store");
+    },
+}));
 app.use((err, _req, res, _next) => {
     console.error("Unhandled error", err);
     res.status(500).json({ error: "Internal server error" });

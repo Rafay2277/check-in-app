@@ -75,7 +75,17 @@ const scannerDir =
   scannerCandidates.find((dir) => fs.existsSync(path.join(dir, "index.html"))) ??
   scannerCandidates[0];
 console.log(`[static] scanner dir: ${scannerDir}`);
-app.use("/scanner", express.static(scannerDir, { index: "index.html" }));
+app.use(
+  "/scanner",
+  express.static(scannerDir, {
+    index: "index.html",
+    etag: false,
+    lastModified: false,
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "no-store");
+    },
+  })
+);
 
 app.use(
   (

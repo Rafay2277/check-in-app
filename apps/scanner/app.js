@@ -159,8 +159,7 @@
     }
     staffToken = data.staffToken;
     sessionStorage.setItem(STAFF_TOKEN_KEY, staffToken);
-    const hours = Math.round((data.expiresIn || 0) / 3600);
-    sessionMeta.textContent = `Shift open · ~${hours}h`;
+    sessionMeta.textContent = "Unlocked";
   }
 
   function handleUnauthorized() {
@@ -169,7 +168,7 @@
     sessionMeta.textContent = "Staff scanner";
     showPin();
     pinError.hidden = false;
-    pinError.textContent = "Shift expired — enter PIN again";
+    pinError.textContent = "Session expired — enter PIN again";
   }
 
   async function validateToken(token) {
@@ -673,7 +672,7 @@
   });
 
   if (staffToken) {
-    sessionMeta.textContent = "Shift open";
+    sessionMeta.textContent = "Unlocked";
     resultScreen.hidden = true;
     showStaff("scan");
     startCamera().catch((err) => {
