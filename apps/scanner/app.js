@@ -207,25 +207,14 @@
       return;
     }
 
-    const viewportWrap = document.querySelector(".viewport-wrap");
-    const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (viewportWrap) viewportWrap.classList.toggle("laptop-cam", !mobile);
-    const videoConstraints = mobile
-      ? {
-          facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        }
-      : {
-          facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        };
-
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: videoConstraints,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
       });
     } catch (err) {
       try {
@@ -248,9 +237,7 @@
     video.srcObject = stream;
     await video.play();
     scanning = true;
-    scanHint.textContent = mobile
-      ? "Point at the member’s QR code"
-      : "Hold the iPhone 8–12 inches from the webcam (top of the laptop), slightly tilted to avoid glare";
+    scanHint.textContent = "Point at the member’s QR code";
     tick();
   }
 

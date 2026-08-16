@@ -325,10 +325,6 @@ input:focus {
   border: 1px solid var(--line);
 }
 
-.viewport-wrap.laptop-cam {
-  aspect-ratio: 16 / 9;
-}
-
 video,
 #overlay {
   position: absolute;
