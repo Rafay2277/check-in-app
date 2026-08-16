@@ -10,7 +10,6 @@
   const pinForm = document.getElementById("pinForm");
   const pinInput = document.getElementById("pinInput");
   const pinError = document.getElementById("pinError");
-  const sessionMeta = document.getElementById("sessionMeta");
   const video = document.getElementById("video");
   const overlay = document.getElementById("overlay");
   const scanHint = document.getElementById("scanHint");
@@ -159,13 +158,11 @@
     }
     staffToken = data.staffToken;
     sessionStorage.setItem(STAFF_TOKEN_KEY, staffToken);
-    sessionMeta.textContent = "Unlocked";
   }
 
   function handleUnauthorized() {
     sessionStorage.removeItem(STAFF_TOKEN_KEY);
     staffToken = "";
-    sessionMeta.textContent = "Staff scanner";
     showPin();
     pinError.hidden = false;
     pinError.textContent = "Session expired — enter PIN again";
@@ -585,7 +582,6 @@
     stopCamera();
     sessionStorage.removeItem(STAFF_TOKEN_KEY);
     staffToken = "";
-    sessionMeta.textContent = "Staff scanner";
     showPin();
   });
 
@@ -672,7 +668,6 @@
   });
 
   if (staffToken) {
-    sessionMeta.textContent = "Unlocked";
     resultScreen.hidden = true;
     showStaff("scan");
     startCamera().catch((err) => {
