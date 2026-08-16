@@ -207,14 +207,25 @@
       return;
     }
 
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
+    const viewportWrap = document.querySelector(".viewport-wrap");
+    const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    if (viewportWrap) viewportWrap.classList.toggle("laptop-cam", !mobile);
+    const videoConstraints = mobile
+      ? {
           facingMode: { ideal: "environment" },
           width: { ideal: 1280 },
           height: { ideal: 720 },
-        },
+        }
+      : {
+          facingMode: "user",
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        };
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: videoConstraints,
       });
     } catch (err) {
       try {
@@ -237,7 +248,9 @@
     video.srcObject = stream;
     await video.play();
     scanning = true;
-    scanHint.textContent = "Point at the member’s QR code";
+    scanHint.textContent = mobile
+      ? "Point at the member’s QR code"
+      : "Hold the iPhone 8–12 inches from the webcam (top of the laptop), slightly tilted to avoid glare";
     tick();
   }
 
@@ -328,13 +341,17 @@
     const w = video.videoWidth;
     const h = video.videoHeight;
     if (w && h && typeof jsQR === "function") {
-      overlay.width = w;
-      overlay.height = h;
+      const maxW = 800;
+      const scale = w > maxW ? maxW / w : 1;
+      const dw = Math.max(1, Math.round(w * scale));
+      const dh = Math.max(1, Math.round(h * scale));
+      overlay.width = dw;
+      overlay.height = dh;
       const ctx = overlay.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(video, 0, 0, w, h);
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const code = jsQR(imageData.data, w, h, {
-        inversionAttempts: "dontInvert",
+      ctx.drawImage(video, 0, 0, dw, dh);
+      const imageData = ctx.getImageData(0, 0, dw, dh);
+      const code = jsQR(imageData.data, dw, dh, {
+        inversionAttempts: "attemptBoth",
       });
       if (code?.data) {
         onDetected(code.data);
