@@ -66,6 +66,8 @@ const envSchema = zod_1.z.object({
     GHL_LOCATION_ID: zod_1.z.string().optional().default(""),
     GHL_POINTS_FIELD_KEY: zod_1.z.string().optional().default(""),
     GHL_POINTS_FIELD_ID: zod_1.z.string().optional().default(""),
+    GHL_CHECKIN_DATE_FIELD_KEY: zod_1.z.string().optional().default("checkin_date"),
+    GHL_CHECKIN_DATE_FIELD_ID: zod_1.z.string().optional().default(""),
     OUTBOX_POLL_INTERVAL_MS: zod_1.z.coerce.number().default(3000),
     OUTBOX_MAX_ATTEMPTS: zod_1.z.coerce.number().default(8),
     /** Calendar day for permanent-card daily limit (IANA tz). */

@@ -1,8 +1,9 @@
 import { pool } from "../db/pool";
 import { env } from "../config";
+import { calendarDateInShopTz } from "../lib/dates";
 import {
   addGhlCheckinNote,
-  updateGhlPointsTotal,
+  updateGhlCheckinProfile,
 } from "../integrations/ghl";
 
 type OutboxRow = {
@@ -12,7 +13,8 @@ type OutboxRow = {
     memberId: string;
     ghlContactId: string;
     pointsTotal: number;
-    checkinTokenId: string;
+    checkinTokenId?: string;
+    checkinDate?: string;
   };
   attempts: number;
 };
@@ -63,9 +65,9 @@ async function claimNextTask(): Promise<OutboxRow | null> {
 
 async function processAwardGhlPoint(task: OutboxRow): Promise<void> {
   const { ghlContactId, pointsTotal } = task.payload;
-  // Push absolute total from our DB (source of truth) — never RMW against GHL
-  await updateGhlPointsTotal(ghlContactId, pointsTotal);
-  await addGhlCheckinNote(ghlContactId, pointsTotal);
+  const checkinDate = task.payload.checkinDate || calendarDateInShopTz();
+  await updateGhlCheckinProfile(ghlContactId, pointsTotal, checkinDate);
+  await addGhlCheckinNote(ghlContactId, pointsTotal, checkinDate);
 }
 
 async function markDone(id: string): Promise<void> {

@@ -4,9 +4,11 @@ exports.normalizePointsFieldKey = normalizePointsFieldKey;
 exports.findGhlContactByPhone = findGhlContactByPhone;
 exports.searchGhlContacts = searchGhlContacts;
 exports.getGhlPointsTotal = getGhlPointsTotal;
+exports.updateGhlCheckinProfile = updateGhlCheckinProfile;
 exports.updateGhlPointsTotal = updateGhlPointsTotal;
 exports.addGhlCheckinNote = addGhlCheckinNote;
 const config_1 = require("../config");
+const dates_1 = require("../lib/dates");
 function ghlHeaders() {
     return {
         Authorization: `Bearer ${config_1.env.GHL_ACCESS_TOKEN}`,
@@ -122,35 +124,57 @@ async function getGhlPointsTotal(ghlContactId) {
         return null;
     return Math.floor(n);
 }
-async function updateGhlPointsTotal(ghlContactId, pointsTotal) {
+async function updateGhlCheckinProfile(ghlContactId, pointsTotal, checkinDate) {
     if (config_1.env.MOCK_INTEGRATIONS) {
-        console.log(`[MOCK GHL] set points=${pointsTotal} on contact ${ghlContactId} field=${config_1.env.GHL_POINTS_FIELD_KEY || "(unset)"}`);
+        console.log(`[MOCK GHL] set points=${pointsTotal} checkin_date=${checkinDate} on contact ${ghlContactId}`);
         return;
     }
     if (!config_1.env.GHL_POINTS_FIELD_KEY && !config_1.env.GHL_POINTS_FIELD_ID) {
         throw new Error("GHL_POINTS_FIELD_KEY or GHL_POINTS_FIELD_ID is required");
     }
-    const customField = config_1.env.GHL_POINTS_FIELD_ID
-        ? { id: config_1.env.GHL_POINTS_FIELD_ID, field_value: pointsTotal }
-        : {
+    const customFields = [];
+    if (config_1.env.GHL_POINTS_FIELD_ID) {
+        customFields.push({
+            id: config_1.env.GHL_POINTS_FIELD_ID,
+            field_value: pointsTotal,
+        });
+    }
+    else {
+        customFields.push({
             key: normalizePointsFieldKey(config_1.env.GHL_POINTS_FIELD_KEY),
             field_value: pointsTotal,
-        };
+        });
+    }
+    const dateKey = normalizePointsFieldKey(config_1.env.GHL_CHECKIN_DATE_FIELD_KEY || "");
+    if (config_1.env.GHL_CHECKIN_DATE_FIELD_ID) {
+        customFields.push({
+            id: config_1.env.GHL_CHECKIN_DATE_FIELD_ID,
+            field_value: checkinDate,
+        });
+    }
+    else if (dateKey) {
+        customFields.push({
+            key: dateKey,
+            field_value: checkinDate,
+        });
+    }
     const res = await fetch(`${config_1.env.GHL_API_BASE_URL}/contacts/${ghlContactId}`, {
         method: "PUT",
         headers: ghlHeaders(),
-        body: JSON.stringify({
-            customFields: [customField],
-        }),
+        body: JSON.stringify({ customFields }),
     });
     if (!res.ok) {
         const text = await res.text();
-        throw new Error(`GHL update points failed (${res.status}): ${text}`);
+        throw new Error(`GHL update check-in profile failed (${res.status}): ${text}`);
     }
 }
-async function addGhlCheckinNote(ghlContactId, pointsTotal) {
+async function updateGhlPointsTotal(ghlContactId, pointsTotal) {
+    await updateGhlCheckinProfile(ghlContactId, pointsTotal, (0, dates_1.calendarDateInShopTz)());
+}
+async function addGhlCheckinNote(ghlContactId, pointsTotal, checkinDate) {
+    const date = checkinDate || (0, dates_1.calendarDateInShopTz)();
     const timestamp = new Date().toISOString();
-    const body = `Loyalty check-in — +1 point (total: ${pointsTotal}) — ${timestamp}`;
+    const body = `Loyalty check-in — +1 point (total: ${pointsTotal}) — ${date} (${timestamp})`;
     if (config_1.env.MOCK_INTEGRATIONS) {
         console.log(`[MOCK GHL] note on ${ghlContactId}: ${body}`);
         return;

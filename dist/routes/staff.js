@@ -8,6 +8,7 @@ const pool_1 = require("../db/pool");
 const tokens_1 = require("../lib/tokens");
 const auth_1 = require("../middleware/auth");
 const ghl_1 = require("../integrations/ghl");
+const dates_1 = require("../lib/dates");
 const outbox_1 = require("../worker/outbox");
 exports.staffRouter = (0, express_1.Router)();
 const pinSchema = zod_1.z.object({
@@ -86,7 +87,11 @@ async function tryValidateRotating(client, token, ghlPointsFloor) {
     if (rows.length === 0)
         return null;
     const { member_id: memberId, token_id: tokenId } = rows[0];
-    const member = await awardPointAndOutbox(client, memberId, `award_ghl_point:${tokenId}`, { checkinTokenId: tokenId, tokenKind: "rotating" }, ghlPointsFloor);
+    const member = await awardPointAndOutbox(client, memberId, `award_ghl_point:${tokenId}`, {
+        checkinTokenId: tokenId,
+        tokenKind: "rotating",
+        checkinDate: (0, dates_1.calendarDateInShopTz)(),
+    }, ghlPointsFloor);
     return {
         approved: true,
         tokenKind: "rotating",

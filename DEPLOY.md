@@ -116,6 +116,7 @@ Optionally also set vars in hPanel → Environment variables. Do **not** commit 
 | `GHL_LOCATION_ID` | GHL location id |
 | `GHL_POINTS_FIELD_KEY` | e.g. `checkin_points` |
 | `GHL_POINTS_FIELD_ID` | optional field id |
+| `GHL_CHECKIN_DATE_FIELD_KEY` | e.g. `checkin_date` (`{{ contact.checkin_date }}`) |
 | `OUTBOX_POLL_INTERVAL_MS` | `3000` |
 | `OUTBOX_MAX_ATTEMPTS` | `8` |
 

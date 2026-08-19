@@ -5,6 +5,7 @@ exports.startOutboxWorker = startOutboxWorker;
 exports.stopOutboxWorker = stopOutboxWorker;
 const pool_1 = require("../db/pool");
 const config_1 = require("../config");
+const dates_1 = require("../lib/dates");
 const ghl_1 = require("../integrations/ghl");
 function backoffSeconds(attempts) {
     // 5s, 15s, 45s, 2m, 5m, 15m, ... capped
@@ -45,9 +46,9 @@ async function claimNextTask() {
 }
 async function processAwardGhlPoint(task) {
     const { ghlContactId, pointsTotal } = task.payload;
-    // Push absolute total from our DB (source of truth) — never RMW against GHL
-    await (0, ghl_1.updateGhlPointsTotal)(ghlContactId, pointsTotal);
-    await (0, ghl_1.addGhlCheckinNote)(ghlContactId, pointsTotal);
+    const checkinDate = task.payload.checkinDate || (0, dates_1.calendarDateInShopTz)();
+    await (0, ghl_1.updateGhlCheckinProfile)(ghlContactId, pointsTotal, checkinDate);
+    await (0, ghl_1.addGhlCheckinNote)(ghlContactId, pointsTotal, checkinDate);
 }
 async function markDone(id) {
     await pool_1.pool.query(`UPDATE outbox_tasks

@@ -6,6 +6,7 @@ import { query, withTransaction } from "../db/pool";
 import { signStaffToken } from "../lib/tokens";
 import { AuthedRequest, requireStaffAuth } from "../middleware/auth";
 import { getGhlPointsTotal } from "../integrations/ghl";
+import { calendarDateInShopTz } from "../lib/dates";
 import { drainOutboxOnce } from "../worker/outbox";
 
 export const staffRouter = Router();
@@ -151,7 +152,11 @@ async function tryValidateRotating(
     client,
     memberId,
     `award_ghl_point:${tokenId}`,
-    { checkinTokenId: tokenId, tokenKind: "rotating" },
+    {
+      checkinTokenId: tokenId,
+      tokenKind: "rotating",
+      checkinDate: calendarDateInShopTz(),
+    },
     ghlPointsFloor
   );
 
