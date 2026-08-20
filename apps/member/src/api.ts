@@ -155,3 +155,20 @@ export async function createCheckinToken(): Promise<CheckinToken> {
   if (!res.ok) throw new Error(data.error || "Could not create check-in");
   return data as CheckinToken;
 }
+
+export async function deleteAccount(): Promise<void> {
+  const res = await apiFetch("/api/auth/account", { method: "DELETE" }, true);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      (data as { error?: string }).error || "Could not delete account"
+    );
+  }
+  await clearSession();
+}
+
+export const LEGAL_URLS = {
+  privacy: "https://dashboard.nouraiz.com/legal/privacy.html",
+  support: "https://dashboard.nouraiz.com/legal/support.html",
+  deleteAccount: "https://dashboard.nouraiz.com/legal/delete-account.html",
+};

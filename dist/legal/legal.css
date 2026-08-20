@@ -1,0 +1,72 @@
+:root {
+  --bg: #111111;
+  --ink: #eee3cf;
+  --muted: #c8c1ad;
+  --accent: #a39e7a;
+  --line: rgba(238, 227, 207, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.55;
+}
+
+.doc {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.4rem 4rem;
+}
+
+.brand {
+  margin: 0 0 1.25rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.22em;
+  text-transform: lowercase;
+  color: var(--accent);
+}
+
+h1 {
+  margin: 0 0 0.4rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+h2 {
+  margin: 1.75rem 0 0.6rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.meta {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.85rem;
+}
+
+p,
+li {
+  color: var(--muted);
+}
+
+ul,
+ol {
+  padding-left: 1.2rem;
+}
+
+a {
+  color: var(--accent);
+}

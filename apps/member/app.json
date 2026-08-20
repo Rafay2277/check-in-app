@@ -15,14 +15,17 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.checkin.member"
+      "bundleIdentifier": "com.fourtillfour.checkin",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#111111"
       },
-      "package": "com.checkin.member"
+      "package": "com.fourtillfour.checkin"
     },
     "plugins": [
       "expo-router",
@@ -32,6 +35,8 @@
     ],
     "extra": {
       "apiBaseUrl": "https://dashboard.nouraiz.com",
+      "privacyPolicyUrl": "https://dashboard.nouraiz.com/legal/privacy.html",
+      "supportUrl": "https://dashboard.nouraiz.com/legal/support.html",
       "router": {},
       "eas": {
         "projectId": "63932906-c9e5-41aa-b115-48e2067d66e4"

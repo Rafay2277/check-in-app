@@ -79,6 +79,23 @@ app.use("/scanner", express_1.default.static(scannerDir, {
         res.setHeader("Cache-Control", "no-store");
     },
 }));
+// Store listing legal pages (privacy / support / account deletion)
+const legalCandidates = [
+    path_1.default.resolve(__dirname, "legal"),
+    path_1.default.resolve(__dirname, "../../legal"),
+    path_1.default.resolve(process.cwd(), "apps/legal"),
+    path_1.default.resolve(process.cwd(), "dist/legal"),
+];
+const legalDir = legalCandidates.find((dir) => fs_1.default.existsSync(path_1.default.join(dir, "privacy.html"))) ??
+    legalCandidates[0];
+console.log(`[static] legal dir: ${legalDir}`);
+app.use("/legal", express_1.default.static(legalDir, {
+    etag: false,
+    lastModified: false,
+    setHeaders(res) {
+        res.setHeader("Cache-Control", "no-store");
+    },
+}));
 app.use((err, _req, res, _next) => {
     console.error("Unhandled error", err);
     res.status(500).json({ error: "Internal server error" });

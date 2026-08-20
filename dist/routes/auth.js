@@ -9,6 +9,7 @@ const tokens_1 = require("../lib/tokens");
 const config_1 = require("../config");
 const ghl_1 = require("../integrations/ghl");
 const twilio_1 = require("../integrations/twilio");
+const auth_1 = require("../middleware/auth");
 exports.authRouter = (0, express_1.Router)();
 const startSchema = zod_1.z.object({
     name: zod_1.z.string().trim().min(1).max(120),
@@ -252,6 +253,31 @@ exports.authRouter.post("/refresh", async (req, res) => {
     catch (err) {
         console.error("auth/refresh failed", err);
         res.status(500).json({ error: "Refresh failed" });
+    }
+});
+/**
+ * Permanently delete the signed-in member account and related local data.
+ * GHL CRM contact is left intact (loyalty CRM ownership stays with the shop).
+ */
+exports.authRouter.delete("/account", auth_1.requireMemberAuth, async (req, res) => {
+    const memberId = req.memberId;
+    if (!memberId) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+    }
+    try {
+        const { rowCount } = await (0, pool_1.query)(`DELETE FROM members WHERE id = $1`, [
+            memberId,
+        ]);
+        if (!rowCount) {
+            res.status(404).json({ error: "Account not found" });
+            return;
+        }
+        res.json({ ok: true, deleted: true });
+    }
+    catch (err) {
+        console.error("auth/account delete failed", err);
+        res.status(500).json({ error: "Could not delete account" });
     }
 });
 async function upsertMember(client, input) {

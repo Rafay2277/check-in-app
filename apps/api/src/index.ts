@@ -87,6 +87,28 @@ app.use(
   })
 );
 
+// Store listing legal pages (privacy / support / account deletion)
+const legalCandidates = [
+  path.resolve(__dirname, "legal"),
+  path.resolve(__dirname, "../../legal"),
+  path.resolve(process.cwd(), "apps/legal"),
+  path.resolve(process.cwd(), "dist/legal"),
+];
+const legalDir =
+  legalCandidates.find((dir) => fs.existsSync(path.join(dir, "privacy.html"))) ??
+  legalCandidates[0];
+console.log(`[static] legal dir: ${legalDir}`);
+app.use(
+  "/legal",
+  express.static(legalDir, {
+    etag: false,
+    lastModified: false,
+    setHeaders(res) {
+      res.setHeader("Cache-Control", "no-store");
+    },
+  })
+);
+
 app.use(
   (
     err: unknown,

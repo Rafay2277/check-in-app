@@ -77,6 +77,12 @@ export default function HomeScreen() {
           onPress={() => router.push("/(app)/confirm")}
           disabled={loading}
         />
+        <Pressable
+          style={styles.signOut}
+          onPress={() => router.push("/(app)/account")}
+        >
+          <Text style={styles.signOutText}>Account</Text>
+        </Pressable>
         <Pressable style={styles.signOut} onPress={onSignOut}>
           <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>

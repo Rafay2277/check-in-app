@@ -15,6 +15,7 @@ import {
 import { env } from "../config";
 import { findGhlContactByPhone } from "../integrations/ghl";
 import { sendSmsOtp } from "../integrations/twilio";
+import { AuthedRequest, requireMemberAuth } from "../middleware/auth";
 
 export const authRouter = Router();
 
@@ -335,6 +336,32 @@ authRouter.post("/refresh", async (req, res) => {
   } catch (err) {
     console.error("auth/refresh failed", err);
     res.status(500).json({ error: "Refresh failed" });
+  }
+});
+
+/**
+ * Permanently delete the signed-in member account and related local data.
+ * GHL CRM contact is left intact (loyalty CRM ownership stays with the shop).
+ */
+authRouter.delete("/account", requireMemberAuth, async (req: AuthedRequest, res) => {
+  const memberId = req.memberId;
+  if (!memberId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  try {
+    const { rowCount } = await query(`DELETE FROM members WHERE id = $1`, [
+      memberId,
+    ]);
+    if (!rowCount) {
+      res.status(404).json({ error: "Account not found" });
+      return;
+    }
+    res.json({ ok: true, deleted: true });
+  } catch (err) {
+    console.error("auth/account delete failed", err);
+    res.status(500).json({ error: "Could not delete account" });
   }
 });
 
