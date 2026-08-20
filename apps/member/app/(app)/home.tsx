@@ -8,8 +8,10 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../../src/auth";
+import { BrandMark } from "../../src/BrandMark";
+import { GoldButton, Hairline, QrGlyph } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
-import { brand, colors, fonts } from "../../src/theme";
+import { colors, fonts } from "../../src/theme";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -44,43 +46,39 @@ export default function HomeScreen() {
     router.replace("/(auth)/welcome");
   }
 
+  const first = member?.name?.split(" ")[0];
+
   return (
     <Screen contentStyle={styles.safe}>
       <View style={styles.body}>
-        <Text style={styles.brand}>{brand.name}</Text>
+        <BrandMark size={150} />
         {loading ? (
           <ActivityIndicator
             color={colors.accentBright}
-            style={{ marginTop: 40 }}
+            style={{ marginTop: 36 }}
           />
         ) : (
-          <>
-            <Text style={styles.hello}>
-              Hi{member?.name ? `, ${member.name.split(" ")[0]}` : ""}
-            </Text>
-            <Text style={styles.points}>
-              {member?.pointsTotal ?? 0}
-              <Text style={styles.pointsLabel}> check-in points</Text>
-            </Text>
-            <Text style={styles.copy}>
-              Ready at the counter? Confirm check-in to show a one-time QR for
-              staff to scan.
+          <View style={styles.meta}>
+            <Text style={styles.label}>Check-in points</Text>
+            <Text style={styles.points}>{member?.pointsTotal ?? 0}</Text>
+            <Hairline />
+            <Text style={styles.since}>
+              {first ? `Hi, ${first}` : "Member"}
             </Text>
             {error ? <Text style={styles.error}>{error}</Text> : null}
-          </>
+          </View>
         )}
       </View>
 
       <View style={styles.actions}>
-        <Pressable
-          style={styles.cta}
+        <GoldButton
+          label="Check in"
+          leading={<QrGlyph />}
           onPress={() => router.push("/(app)/confirm")}
           disabled={loading}
-        >
-          <Text style={styles.ctaText}>Check in</Text>
-        </Pressable>
-        <Pressable style={styles.ghost} onPress={onSignOut}>
-          <Text style={styles.ghostText}>Sign out</Text>
+        />
+        <Pressable style={styles.signOut} onPress={onSignOut}>
+          <Text style={styles.signOutText}>Sign out</Text>
         </Pressable>
       </View>
     </Screen>
@@ -89,75 +87,56 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   safe: {
-    paddingBottom: 24,
+    paddingBottom: 18,
     justifyContent: "space-between",
   },
-  body: { paddingTop: 12, gap: 10 },
-  brand: {
-    color: colors.ink,
-    fontFamily: fonts.display,
-    fontSize: 28,
-    letterSpacing: 0.4,
-    textTransform: "lowercase",
-    marginBottom: 10,
+  body: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingBottom: 24,
   },
-  hello: {
-    color: colors.ink,
-    fontFamily: fonts.display,
-    fontSize: 30,
-    letterSpacing: 0.4,
+  meta: {
+    marginTop: 36,
+    alignItems: "center",
+    width: "72%",
+  },
+  label: {
+    color: colors.accentBright,
+    fontFamily: fonts.sansBold,
+    fontSize: 11,
+    letterSpacing: 2.2,
     textTransform: "uppercase",
   },
   points: {
     color: colors.ink,
-    fontFamily: fonts.display,
-    fontSize: 42,
-    marginTop: 10,
+    fontFamily: fonts.sans,
+    fontSize: 72,
+    lineHeight: 80,
+    marginTop: 6,
+    letterSpacing: 1,
   },
-  pointsLabel: {
+  since: {
     color: colors.muted,
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
-    letterSpacing: 0.8,
+    fontSize: 11,
+    letterSpacing: 1.8,
     textTransform: "uppercase",
-  },
-  copy: {
-    color: colors.muted,
-    fontFamily: fonts.serif,
-    fontSize: 16,
-    lineHeight: 24,
-    marginTop: 8,
-    maxWidth: 340,
   },
   error: {
     color: colors.bad,
-    marginTop: 8,
+    marginTop: 10,
     fontFamily: fonts.sansMedium,
+    textAlign: "center",
   },
-  actions: { gap: 10 },
-  cta: {
-    backgroundColor: colors.accent,
-    borderRadius: 2,
-    paddingVertical: 16,
+  actions: { gap: 8 },
+  signOut: {
+    paddingVertical: 12,
     alignItems: "center",
   },
-  ctaText: {
-    color: colors.ctaText,
-    fontFamily: fonts.sansBold,
-    fontSize: 13,
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
-  },
-  ghost: {
-    borderRadius: 2,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  ghostText: {
+  signOutText: {
     color: colors.muted,
-    fontFamily: fonts.sansSemi,
+    fontFamily: fonts.sansMedium,
     fontSize: 12,
     letterSpacing: 1.4,
     textTransform: "uppercase",

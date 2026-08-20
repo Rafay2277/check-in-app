@@ -1,7 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,8 +11,10 @@ import {
 } from "react-native";
 import { startAuth, verifyAuth } from "../../src/api";
 import { useAuth } from "../../src/auth";
+import { BrandMark } from "../../src/BrandMark";
+import { GoldButton } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
-import { colors, fonts } from "../../src/theme";
+import { colors, fonts, radii } from "../../src/theme";
 
 export default function VerifyScreen() {
   const router = useRouter();
@@ -56,15 +57,16 @@ export default function VerifyScreen() {
   }
 
   return (
-    <Screen edges={["bottom"]} contentStyle={styles.safe}>
+    <Screen contentStyle={styles.safe}>
       <KeyboardAvoidingView
         style={styles.wrap}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.form}>
+        <View>
+          <BrandMark size={72} />
+          <Text style={styles.title}>Enter your code.</Text>
           <Text style={styles.copy}>
-            Enter the 6-digit code sent to{" "}
-            <Text style={styles.phone}>{params.phone}</Text>
+            Sent to <Text style={styles.phone}>{params.phone}</Text>
           </Text>
           <TextInput
             style={styles.input}
@@ -83,45 +85,46 @@ export default function VerifyScreen() {
             </Text>
           </Pressable>
         </View>
-        <Pressable
-          style={[styles.cta, (code.length !== 6 || busy) && styles.ctaDisabled]}
-          disabled={code.length !== 6 || busy}
+        <GoldButton
+          label="Verify"
           onPress={onVerify}
-        >
-          {busy ? (
-            <ActivityIndicator color={colors.ctaText} />
-          ) : (
-            <Text style={styles.ctaText}>Verify</Text>
-          )}
-        </Pressable>
+          loading={busy}
+          disabled={code.length !== 6}
+        />
       </KeyboardAvoidingView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { paddingBottom: 24 },
+  safe: { paddingBottom: 28 },
   wrap: {
     flex: 1,
     justifyContent: "space-between",
     paddingTop: 8,
   },
-  form: { gap: 14 },
+  title: {
+    color: colors.ink,
+    fontFamily: fonts.sansSemi,
+    fontSize: 26,
+    textAlign: "center",
+    marginTop: 28,
+  },
   copy: {
     color: colors.muted,
-    fontFamily: fonts.serif,
-    fontSize: 16,
-    lineHeight: 24,
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 24,
   },
   phone: {
     color: colors.ink,
-    fontFamily: fonts.sansBold,
+    fontFamily: fonts.sansSemi,
   },
   input: {
     backgroundColor: colors.input,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 2,
+    borderRadius: radii.sm,
     color: colors.ink,
     paddingHorizontal: 14,
     paddingVertical: 16,
@@ -130,25 +133,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: fonts.sansBold,
   },
-  error: { color: colors.bad, fontFamily: fonts.sansMedium },
+  error: {
+    color: colors.bad,
+    marginTop: 12,
+    fontFamily: fonts.sansMedium,
+    textAlign: "center",
+  },
   resend: {
     color: colors.accentBright,
     fontFamily: fonts.sansSemi,
-    marginTop: 4,
+    marginTop: 16,
+    textAlign: "center",
   },
   resendDisabled: { color: colors.muted },
-  cta: {
-    backgroundColor: colors.accent,
-    borderRadius: 2,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  ctaDisabled: { opacity: 0.5 },
-  ctaText: {
-    color: colors.ctaText,
-    fontFamily: fonts.sansBold,
-    fontSize: 13,
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
-  },
 });

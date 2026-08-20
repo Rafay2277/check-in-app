@@ -26,5 +26,12 @@ export const fonts = {
 
 export const brand = {
   name: "fourtillfour",
+  lockup: "CAR CLUB",
   tagline: "Where specialty coffee meets automotive culture",
+};
+
+export const radii = {
+  sm: 10,
+  md: 16,
+  lg: 22,
 };

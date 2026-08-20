@@ -1,10 +1,8 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -12,8 +10,10 @@ import {
 } from "react-native";
 import { startAuth } from "../../src/api";
 import { useAuth } from "../../src/auth";
+import { BrandMark } from "../../src/BrandMark";
+import { GoldButton } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
-import { colors, fonts } from "../../src/theme";
+import { colors, fonts, radii } from "../../src/theme";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -45,13 +45,16 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen edges={["bottom"]} contentStyle={styles.safe}>
+    <Screen contentStyle={styles.safe}>
       <KeyboardAvoidingView
         style={styles.wrap}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={styles.form}>
-          <Text style={styles.label}>Name</Text>
+        <View>
+          <BrandMark size={88} />
+          <Text style={styles.title}>Let’s get you set up.</Text>
+          <Text style={styles.sub}>Enter your name and phone to get started.</Text>
+          <Text style={styles.label}>Full name</Text>
           <TextInput
             style={styles.input}
             value={name}
@@ -70,81 +73,63 @@ export default function LoginScreen() {
             placeholderTextColor={colors.muted}
             autoComplete="tel"
           />
-          <Text style={styles.hint}>
-            Use the phone number on your fourtillfour loyalty account. US numbers
-            default to +1.
-          </Text>
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </View>
-        <Pressable
-          style={[
-            styles.cta,
-            (!name.trim() || !phone.trim() || busy) && styles.ctaDisabled,
-          ]}
-          disabled={!name.trim() || !phone.trim() || busy}
+        <GoldButton
+          label="Continue"
           onPress={onSubmit}
-        >
-          {busy ? (
-            <ActivityIndicator color={colors.ctaText} />
-          ) : (
-            <Text style={styles.ctaText}>Continue</Text>
-          )}
-        </Pressable>
+          loading={busy}
+          disabled={!name.trim() || !phone.trim()}
+        />
       </KeyboardAvoidingView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { paddingBottom: 24 },
+  safe: { paddingBottom: 28 },
   wrap: {
     flex: 1,
     justifyContent: "space-between",
     paddingTop: 8,
   },
-  form: { gap: 10 },
+  title: {
+    color: colors.ink,
+    fontFamily: fonts.sansSemi,
+    fontSize: 26,
+    textAlign: "center",
+    marginTop: 28,
+  },
+  sub: {
+    color: colors.muted,
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 28,
+  },
   label: {
     color: colors.accentBright,
     fontFamily: fonts.sansBold,
     fontSize: 11,
     letterSpacing: 1.8,
     textTransform: "uppercase",
-    marginTop: 8,
+    marginBottom: 8,
+    marginTop: 14,
   },
   input: {
     backgroundColor: colors.input,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 2,
+    borderRadius: radii.sm,
     color: colors.ink,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
     fontSize: 16,
     fontFamily: fonts.sans,
   },
-  hint: {
-    color: colors.muted,
-    fontFamily: fonts.serif,
-    fontSize: 14,
-    lineHeight: 20,
-  },
   error: {
     color: colors.bad,
-    marginTop: 8,
+    marginTop: 12,
     fontFamily: fonts.sansMedium,
-  },
-  cta: {
-    backgroundColor: colors.accent,
-    borderRadius: 2,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
-  ctaDisabled: { opacity: 0.5 },
-  ctaText: {
-    color: colors.ctaText,
-    fontFamily: fonts.sansBold,
-    fontSize: 13,
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
+    textAlign: "center",
   },
 });

@@ -1,15 +1,11 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { createCheckinToken } from "../../src/api";
+import { BrandMark } from "../../src/BrandMark";
+import { GhostButton, GoldButton } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
-import { colors, fonts } from "../../src/theme";
+import { colors, fonts, radii } from "../../src/theme";
 
 export default function ConfirmScreen() {
   const router = useRouter();
@@ -35,27 +31,32 @@ export default function ConfirmScreen() {
   }
 
   return (
-    <Screen edges={["bottom"]} contentStyle={styles.safe}>
-      <View style={styles.body}>
-        <Text style={styles.title}>Check in now?</Text>
-        <Text style={styles.copy}>Did you bring your registered car today?</Text>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+    <Screen contentStyle={styles.safe}>
+      <View style={styles.hero}>
+        <BrandMark size={150} />
       </View>
-      <View style={styles.actions}>
-        <Pressable style={styles.cta} onPress={onConfirm} disabled={busy}>
-          {busy ? (
-            <ActivityIndicator color={colors.ctaText} />
-          ) : (
-            <Text style={styles.ctaText}>Yes, I brought my car</Text>
-          )}
-        </Pressable>
-        <Pressable
-          style={styles.ghost}
-          onPress={() => router.back()}
-          disabled={busy}
-        >
-          <Text style={styles.ghostText}>No, just here for coffee</Text>
-        </Pressable>
+
+      <View style={styles.sheet}>
+        <View style={styles.handle} />
+        <BrandMark variant="gold" size={52} showWordmark={false} />
+        <Text style={styles.title}>Did you bring your car today?</Text>
+        <Text style={styles.copy}>
+          Members enjoy one complimentary coffee per visit when they bring their
+          registered car.
+        </Text>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <View style={styles.actions}>
+          <GoldButton
+            label="Yes, I brought my car"
+            onPress={onConfirm}
+            loading={busy}
+          />
+          <GhostButton
+            label="No, just here for coffee"
+            onPress={() => router.back()}
+            disabled={busy}
+          />
+        </View>
       </View>
     </Screen>
   );
@@ -63,50 +64,57 @@ export default function ConfirmScreen() {
 
 const styles = StyleSheet.create({
   safe: {
-    paddingBottom: 24,
+    paddingHorizontal: 0,
     justifyContent: "space-between",
   },
-  body: { paddingTop: 24, gap: 12 },
+  hero: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    opacity: 0.92,
+  },
+  sheet: {
+    backgroundColor: colors.bg1,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 28,
+    gap: 12,
+    alignItems: "center",
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(238, 227, 207, 0.22)",
+    marginBottom: 8,
+  },
   title: {
     color: colors.ink,
-    fontFamily: fonts.display,
-    fontSize: 30,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
+    fontFamily: fonts.sansSemi,
+    fontSize: 22,
+    textAlign: "center",
+    marginTop: 4,
   },
   copy: {
     color: colors.muted,
-    fontFamily: fonts.serif,
-    fontSize: 16,
-    lineHeight: 24,
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+    marginBottom: 8,
+    paddingHorizontal: 8,
   },
-  error: { color: colors.bad, fontFamily: fonts.sansMedium },
-  actions: { gap: 10 },
-  cta: {
-    backgroundColor: colors.accent,
-    borderRadius: 2,
-    paddingVertical: 16,
-    alignItems: "center",
+  error: {
+    color: colors.bad,
+    fontFamily: fonts.sansMedium,
+    textAlign: "center",
   },
-  ctaText: {
-    color: colors.ctaText,
-    fontFamily: fonts.sansBold,
-    fontSize: 13,
-    letterSpacing: 1.6,
-    textTransform: "uppercase",
-  },
-  ghost: {
-    borderRadius: 2,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  ghostText: {
-    color: colors.muted,
-    fontFamily: fonts.sansSemi,
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
+  actions: {
+    alignSelf: "stretch",
+    gap: 10,
+    marginTop: 4,
   },
 });

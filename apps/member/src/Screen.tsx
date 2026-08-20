@@ -20,16 +20,9 @@ export function Screen({
   return (
     <View style={[styles.root, style]}>
       <LinearGradient
-        colors={["#191919", "#111111", "#0d0d0d"]}
-        locations={[0, 0.5, 1]}
+        colors={["#161616", colors.bg0, "#0c0c0c"]}
+        locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
-      />
-      <LinearGradient
-        colors={["rgba(163,158,122,0.18)", "transparent"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0.7 }}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
       />
       <SafeAreaView style={[styles.safe, contentStyle]} edges={edges}>
         {children}
