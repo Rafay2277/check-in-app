@@ -36,6 +36,7 @@
     "extra": {
       "apiBaseUrl": "https://dashboard.nouraiz.com",
       "privacyPolicyUrl": "https://dashboard.nouraiz.com/legal/privacy.html",
+      "termsOfUseUrl": "https://dashboard.nouraiz.com/legal/terms.html",
       "supportUrl": "https://dashboard.nouraiz.com/legal/support.html",
       "router": {},
       "eas": {

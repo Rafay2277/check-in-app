@@ -169,6 +169,7 @@ export async function deleteAccount(): Promise<void> {
 
 export const LEGAL_URLS = {
   privacy: "https://dashboard.nouraiz.com/legal/privacy.html",
+  terms: "https://dashboard.nouraiz.com/legal/terms.html",
   support: "https://dashboard.nouraiz.com/legal/support.html",
   deleteAccount: "https://dashboard.nouraiz.com/legal/delete-account.html",
 };

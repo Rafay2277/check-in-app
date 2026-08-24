@@ -87,7 +87,7 @@ app.use(
   })
 );
 
-// Store listing legal pages (privacy / support / account deletion)
+// Store listing legal pages (privacy / terms / support / account deletion)
 const legalCandidates = [
   path.resolve(__dirname, "legal"),
   path.resolve(__dirname, "../../legal"),

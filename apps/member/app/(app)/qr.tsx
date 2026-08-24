@@ -46,12 +46,12 @@ export default function QrScreen() {
           <Text style={styles.checkMark}>✓</Text>
         </View>
         <Text style={styles.title}>
-          {expired ? "This code expired." : "You’re checked in."}
+          {expired ? "This code expired." : "Ready to check in"}
         </Text>
         <Text style={styles.copy}>
           {expired
             ? "Go back and check in again."
-            : "Show this QR code to the barista to redeem your member coffee."}
+            : "Show this QR to staff so they can approve your visit and points."}
         </Text>
 
         <View style={[styles.qrWrap, expired && styles.qrExpired]}>

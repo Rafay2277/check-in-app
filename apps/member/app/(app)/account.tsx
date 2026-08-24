@@ -69,6 +69,12 @@ export default function AccountScreen() {
         </Pressable>
         <Pressable
           style={styles.linkRow}
+          onPress={() => void Linking.openURL(LEGAL_URLS.terms)}
+        >
+          <Text style={styles.linkText}>Terms of Use</Text>
+        </Pressable>
+        <Pressable
+          style={styles.linkRow}
           onPress={() => void Linking.openURL(LEGAL_URLS.support)}
         >
           <Text style={styles.linkText}>Support</Text>
