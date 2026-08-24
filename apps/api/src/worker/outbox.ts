@@ -3,6 +3,7 @@ import { env } from "../config";
 import { calendarDateInShopTz } from "../lib/dates";
 import {
   addGhlCheckinNote,
+  createGhlCheckinHistoryRecord,
   updateGhlCheckinProfile,
 } from "../integrations/ghl";
 
@@ -68,6 +69,7 @@ async function processAwardGhlPoint(task: OutboxRow): Promise<void> {
   const checkinDate = task.payload.checkinDate || calendarDateInShopTz();
   await updateGhlCheckinProfile(ghlContactId, pointsTotal, checkinDate);
   await addGhlCheckinNote(ghlContactId, pointsTotal, checkinDate);
+  await createGhlCheckinHistoryRecord(ghlContactId, pointsTotal, checkinDate);
 }
 
 async function markDone(id: string): Promise<void> {

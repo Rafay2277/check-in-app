@@ -43,6 +43,8 @@ function normalizeName(s) {
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
+    // curly / typographic apostrophes → straight (GHL often stores ’)
+    .replace(/[\u2018\u2019\u201B\u2032]/g, "'")
     .replace(/[''`]/g, "'")
     .replace(/[^a-z0-9'\s]/g, " ")
     .replace(/\s+/g, " ")
@@ -94,7 +96,22 @@ async function main() {
     process.stdout.write(`lookup: ${name}… `);
     let contacts;
     try {
-      contacts = await searchGhl(name);
+      // Try straight + curly apostrophe variants (GHL indexes these differently)
+      const variants = Array.from(
+        new Set([
+          name,
+          name.replace(/'/g, "\u2019"),
+          name.replace(/\u2019/g, "'"),
+          name.replace(/['\u2019]/g, ""),
+          name.replace(/['\u2019]/g, " "),
+        ])
+      );
+      const byId = new Map();
+      for (const q of variants) {
+        for (const c of await searchGhl(q)) byId.set(c.id, c);
+        await new Promise((r) => setTimeout(r, 120));
+      }
+      contacts = [...byId.values()];
     } catch (err) {
       console.log("ERROR");
       ambiguous.push({

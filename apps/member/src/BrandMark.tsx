@@ -21,7 +21,7 @@ export function BrandMark({
     <View style={styles.wrap}>
       <Image
         source={logos[variant]}
-        style={{ width: size, height: size * 0.74 }}
+        style={{ width: size, height: size * 0.86 }}
         resizeMode="contain"
       />
       {showWordmark ? (

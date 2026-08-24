@@ -117,6 +117,11 @@ Optionally also set vars in hPanel → Environment variables. Do **not** commit 
 | `GHL_POINTS_FIELD_KEY` | e.g. `checkin_points` |
 | `GHL_POINTS_FIELD_ID` | optional field id |
 | `GHL_CHECKIN_DATE_FIELD_KEY` | e.g. `checkin_date` (`{{ contact.checkin_date }}`) |
+| `GHL_CHECKIN_OBJECT_KEY` | `custom_objects.check_ins` (per-visit history) |
+| `GHL_CHECKIN_OBJECT_DATE_FIELD_KEY` | `checkin_date` |
+| `GHL_CHECKIN_OBJECT_POINTS_FIELD_KEY` | `points_total` |
+| `GHL_CHECKIN_OBJECT_NAME_FIELD_KEY` | `check_in` (display name on each record) |
+| `GHL_CHECKIN_ASSOCIATION_ID` | Association id for Contact ↔ Check-ins |
 | `OUTBOX_POLL_INTERVAL_MS` | `3000` |
 | `OUTBOX_MAX_ATTEMPTS` | `8` |
 
