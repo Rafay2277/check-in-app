@@ -33,10 +33,15 @@ const NAMES = [
 
 const GHL_API_BASE_URL =
   process.env.GHL_API_BASE_URL || "https://services.leadconnectorhq.com";
-const GHL_ACCESS_TOKEN =
-  process.env.GHL_ACCESS_TOKEN || "pit-a0fd1440-d7c2-4225-90a9-663611497330";
-const GHL_LOCATION_ID =
-  process.env.GHL_LOCATION_ID || "yHs4RFTv6UhefdKgZfgM";
+const GHL_ACCESS_TOKEN = process.env.GHL_ACCESS_TOKEN?.trim();
+const GHL_LOCATION_ID = process.env.GHL_LOCATION_ID?.trim();
+
+if (!GHL_ACCESS_TOKEN || !GHL_LOCATION_ID) {
+  console.error(
+    "Set GHL_ACCESS_TOKEN and GHL_LOCATION_ID (e.g. from private/checkin.env or .env)"
+  );
+  process.exit(1);
+}
 
 function normalizeName(s) {
   return String(s || "")

@@ -101,9 +101,9 @@ Optionally also set vars in hPanel → Environment variables. Do **not** commit 
 | `PUBLIC_BASE_URL` | `https://dashboard.nouraiz.com` |
 | `DATABASE_URL` | Full Supabase URI (may fail to save on Hostinger if password has `@` `%` `!`) |
 | **or split (recommended on Hostinger)** | |
-| `DB_USER` | `postgres.oimnlcqzyrcwonohccku` |
+| `DB_USER` | `postgres.your-supabase-project-ref` (Supabase pooler user) |
 | `DB_PASSWORD` | literal DB password (no URL encoding) |
-| `DB_HOST` | `aws-0-eu-north-1.pooler.supabase.com` |
+| `DB_HOST` | e.g. `aws-0-region.pooler.supabase.com` |
 | `DB_PORT` | `5432` |
 | `DB_NAME` | `postgres` |
 | `SKIP_MIGRATE_ON_START` | `true` after schema exists |
