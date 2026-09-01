@@ -7,6 +7,16 @@ type GhlContact = {
 };
 /** Normalize merge-tag style values like {{contact.checkin_points}} → checkin_points */
 export declare function normalizePointsFieldKey(raw: string): string;
+/**
+ * Normalize custom-object field keys from merge tags, e.g.
+ * {{custom_objects.check_ins.checkin_date}} → checkin_date
+ */
+export declare function normalizeCustomObjectFieldKey(raw: string): string;
+/**
+ * One Custom Object record per visit, associated to the Contact (history for automations).
+ * No-ops when object key is empty or association cannot be resolved.
+ */
+export declare function createGhlCheckinHistoryRecord(ghlContactId: string, pointsTotal: number, checkinDate: string): Promise<void>;
 export declare function findGhlContactByPhone(phoneE164: string): Promise<GhlContact | null>;
 /**
  * Free-text contact search (name or phone) against GHL directory.

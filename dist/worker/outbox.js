@@ -49,6 +49,7 @@ async function processAwardGhlPoint(task) {
     const checkinDate = task.payload.checkinDate || (0, dates_1.calendarDateInShopTz)();
     await (0, ghl_1.updateGhlCheckinProfile)(ghlContactId, pointsTotal, checkinDate);
     await (0, ghl_1.addGhlCheckinNote)(ghlContactId, pointsTotal, checkinDate);
+    await (0, ghl_1.createGhlCheckinHistoryRecord)(ghlContactId, pointsTotal, checkinDate);
 }
 async function markDone(id) {
     await pool_1.pool.query(`UPDATE outbox_tasks

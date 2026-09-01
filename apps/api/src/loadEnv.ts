@@ -33,9 +33,10 @@ export function loadEnvFiles(): string[] {
     if (tried.has(abs)) continue;
     tried.add(abs);
     if (!fs.existsSync(abs)) continue;
-    const result = dotenv.config({ path: abs, override: false });
+    const override = /private[/\\]checkin\.env$/i.test(abs);
+    const result = dotenv.config({ path: abs, override });
     if (!result.error) {
-      loaded.push(abs);
+      loaded.push(abs + (override ? " (override)" : ""));
     }
   }
 

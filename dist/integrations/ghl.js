@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizePointsFieldKey = normalizePointsFieldKey;
+exports.normalizeCustomObjectFieldKey = normalizeCustomObjectFieldKey;
+exports.createGhlCheckinHistoryRecord = createGhlCheckinHistoryRecord;
 exports.findGhlContactByPhone = findGhlContactByPhone;
 exports.searchGhlContacts = searchGhlContacts;
 exports.getGhlPointsTotal = getGhlPointsTotal;
@@ -26,6 +28,139 @@ function normalizePointsFieldKey(raw) {
     if (trimmed.startsWith("contact."))
         return trimmed.slice("contact.".length);
     return trimmed;
+}
+/**
+ * Normalize custom-object field keys from merge tags, e.g.
+ * {{custom_objects.check_ins.checkin_date}} → checkin_date
+ */
+function normalizeCustomObjectFieldKey(raw) {
+    const trimmed = raw.trim();
+    const merge = trimmed.match(/\{\{\s*custom_objects\.[a-zA-Z0-9_]+\.([a-zA-Z0-9_]+)\s*\}\}/);
+    if (merge)
+        return merge[1];
+    const dotted = trimmed.match(/^custom_objects\.[a-zA-Z0-9_]+\.([a-zA-Z0-9_]+)$/);
+    if (dotted)
+        return dotted[1];
+    return trimmed;
+}
+let cachedCheckinAssociation;
+function isContactObjectKey(key) {
+    if (!key)
+        return false;
+    const k = key.toLowerCase();
+    return k === "contact" || k === "contacts";
+}
+async function resolveCheckinAssociation(schemaKey) {
+    if (cachedCheckinAssociation !== undefined) {
+        return cachedCheckinAssociation;
+    }
+    const configuredId = config_1.env.GHL_CHECKIN_ASSOCIATION_ID?.trim();
+    const url = new URL(`${config_1.env.GHL_API_BASE_URL}/associations/objectKey/${encodeURIComponent(schemaKey)}`);
+    url.searchParams.set("locationId", config_1.env.GHL_LOCATION_ID);
+    const res = await fetch(url.toString(), {
+        method: "GET",
+        headers: ghlHeaders(),
+    });
+    if (res.ok) {
+        const data = (await res.json());
+        const list = Array.isArray(data)
+            ? data
+            : Array.isArray(data.associations)
+                ? data.associations
+                : data && typeof data === "object" && "id" in data
+                    ? [data]
+                    : [];
+        const match = list.find((a) => {
+            if (configuredId && a.id && a.id !== configuredId)
+                return false;
+            const first = String(a.firstObjectKey ?? "");
+            const second = String(a.secondObjectKey ?? "");
+            return ((first === schemaKey && isContactObjectKey(second)) ||
+                (second === schemaKey && isContactObjectKey(first)));
+        });
+        if (match?.id) {
+            cachedCheckinAssociation = {
+                id: match.id,
+                contactIsFirst: isContactObjectKey(String(match.firstObjectKey ?? "")),
+            };
+            return cachedCheckinAssociation;
+        }
+    }
+    else {
+        const text = await res.text();
+        console.warn(`[ghl] could not auto-resolve check-in association (${res.status}): ${text}`);
+    }
+    // Fallback: env id only — assume Contact is first object (typical 1:many setup).
+    if (configuredId) {
+        cachedCheckinAssociation = { id: configuredId, contactIsFirst: true };
+        return cachedCheckinAssociation;
+    }
+    cachedCheckinAssociation = null;
+    return null;
+}
+/**
+ * One Custom Object record per visit, associated to the Contact (history for automations).
+ * No-ops when object key is empty or association cannot be resolved.
+ */
+async function createGhlCheckinHistoryRecord(ghlContactId, pointsTotal, checkinDate) {
+    const schemaKey = config_1.env.GHL_CHECKIN_OBJECT_KEY?.trim();
+    if (!schemaKey)
+        return;
+    if (config_1.env.MOCK_INTEGRATIONS) {
+        console.log(`[MOCK GHL] create ${schemaKey} record date=${checkinDate} points=${pointsTotal} for contact ${ghlContactId}`);
+        return;
+    }
+    const association = await resolveCheckinAssociation(schemaKey);
+    if (!association) {
+        console.warn("[ghl] skipping check-in history record: set GHL_CHECKIN_ASSOCIATION_ID " +
+            "(Settings → Custom Objects → Associations) and ensure the Private Integration " +
+            "has objects/record.write + associations/relation.write (+ associations.readonly to auto-resolve).");
+        return;
+    }
+    const dateKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_DATE_FIELD_KEY || "checkin_date");
+    const pointsKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_POINTS_FIELD_KEY || "points_total");
+    const nameKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_NAME_FIELD_KEY || "check_in");
+    const properties = {
+        [dateKey]: checkinDate,
+        [pointsKey]: pointsTotal,
+    };
+    if (nameKey) {
+        // Primary display field on the Check-ins object (required by many GHL schemas).
+        properties[nameKey] = `Check-in ${checkinDate}`;
+    }
+    const createRes = await fetch(`${config_1.env.GHL_API_BASE_URL}/objects/${encodeURIComponent(schemaKey)}/records`, {
+        method: "POST",
+        headers: ghlHeaders(),
+        body: JSON.stringify({
+            locationId: config_1.env.GHL_LOCATION_ID,
+            properties,
+        }),
+    });
+    if (!createRes.ok) {
+        const text = await createRes.text();
+        throw new Error(`GHL create check-in record failed (${createRes.status}): ${text}`);
+    }
+    const created = (await createRes.json());
+    const recordId = created.record?.id || created.id;
+    if (!recordId) {
+        throw new Error(`GHL create check-in record returned no id: ${JSON.stringify(created)}`);
+    }
+    const firstRecordId = association.contactIsFirst ? ghlContactId : recordId;
+    const secondRecordId = association.contactIsFirst ? recordId : ghlContactId;
+    const relRes = await fetch(`${config_1.env.GHL_API_BASE_URL}/associations/relations`, {
+        method: "POST",
+        headers: ghlHeaders(),
+        body: JSON.stringify({
+            locationId: config_1.env.GHL_LOCATION_ID,
+            associationId: association.id,
+            firstRecordId,
+            secondRecordId,
+        }),
+    });
+    if (!relRes.ok) {
+        const text = await relRes.text();
+        throw new Error(`GHL associate check-in record failed (${relRes.status}): ${text}`);
+    }
 }
 async function findGhlContactByPhone(phoneE164) {
     if (config_1.env.MOCK_INTEGRATIONS) {

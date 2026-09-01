@@ -68,6 +68,18 @@ const envSchema = zod_1.z.object({
     GHL_POINTS_FIELD_ID: zod_1.z.string().optional().default(""),
     GHL_CHECKIN_DATE_FIELD_KEY: zod_1.z.string().optional().default("checkin_date"),
     GHL_CHECKIN_DATE_FIELD_ID: zod_1.z.string().optional().default(""),
+    /** Custom Object schema key for per-visit history (empty = skip). */
+    GHL_CHECKIN_OBJECT_KEY: zod_1.z.string().optional().default("custom_objects.check_ins"),
+    /** Field keys on that object (from merge tags {{custom_objects.check_ins.*}}). */
+    GHL_CHECKIN_OBJECT_DATE_FIELD_KEY: zod_1.z.string().optional().default("checkin_date"),
+    GHL_CHECKIN_OBJECT_POINTS_FIELD_KEY: zod_1.z.string().optional().default("points_total"),
+    /** Primary/display name field on the Check-ins object ({{custom_objects.check_ins.check_in}}). */
+    GHL_CHECKIN_OBJECT_NAME_FIELD_KEY: zod_1.z.string().optional().default("check_in"),
+    /**
+     * Association id between Contact and Check-ins (Settings → Custom Objects → Associations).
+     * Required to write history unless associations.readonly can auto-resolve it.
+     */
+    GHL_CHECKIN_ASSOCIATION_ID: zod_1.z.string().optional().default(""),
     OUTBOX_POLL_INTERVAL_MS: zod_1.z.coerce.number().default(3000),
     OUTBOX_MAX_ATTEMPTS: zod_1.z.coerce.number().default(8),
     /** Calendar day for permanent-card daily limit (IANA tz). */

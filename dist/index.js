@@ -79,7 +79,7 @@ app.use("/scanner", express_1.default.static(scannerDir, {
         res.setHeader("Cache-Control", "no-store");
     },
 }));
-// Store listing legal pages (privacy / support / account deletion)
+// Store listing legal pages (privacy / terms / support / account deletion)
 const legalCandidates = [
     path_1.default.resolve(__dirname, "legal"),
     path_1.default.resolve(__dirname, "../../legal"),

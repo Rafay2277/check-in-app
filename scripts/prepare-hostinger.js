@@ -40,4 +40,5 @@ console.log("[prepare-hostinger] Ready:");
 console.log("  ", path.join(outDist, "index.js"));
 console.log("  ", path.join(outDist, "scanner", "index.html"));
 console.log("  ", path.join(outDist, "legal", "privacy.html"));
+console.log("  ", path.join(outDist, "legal", "terms.html"));
 console.log("  ", path.join(outDist, "migrations"));

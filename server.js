@@ -42,8 +42,10 @@ function loadHostingerEnv() {
     const loaded = [];
     for (const file of candidates) {
       if (!exists(file)) continue;
-      const result = dotenv.config({ path: file, override: false });
-      if (!result.error) loaded.push(file);
+      // private/checkin.env must win over stale Hostinger panel defaults (e.g. STAFF_PIN=1234)
+      const override = /private[/\\]checkin\.env$/i.test(file);
+      const result = dotenv.config({ path: file, override });
+      if (!result.error) loaded.push(file + (override ? " (override)" : ""));
     }
     if (loaded.length) {
       console.log("[server] env file(s):", loaded.join(" | "));

@@ -38,9 +38,10 @@ function loadEnvFiles() {
         tried.add(abs);
         if (!fs_1.default.existsSync(abs))
             continue;
-        const result = dotenv_1.default.config({ path: abs, override: false });
+        const override = /private[/\\]checkin\.env$/i.test(abs);
+        const result = dotenv_1.default.config({ path: abs, override });
         if (!result.error) {
-            loaded.push(abs);
+            loaded.push(abs + (override ? " (override)" : ""));
         }
     }
     // cwd default as last resort
