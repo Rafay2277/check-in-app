@@ -12,29 +12,32 @@ function backoffSeconds(attempts) {
     const base = Math.min(5 * Math.pow(3, Math.max(0, attempts - 1)), 900);
     return base;
 }
+/**
+ * Claim one pending task with a short lease (available_at pushed forward).
+ * Without this, the poller + post-validate drain can both process the same
+ * pending row and create duplicate GHL Check-in records.
+ */
 async function claimNextTask() {
     const client = await pool_1.pool.connect();
     try {
         await client.query("BEGIN");
-        const { rows } = await client.query(`SELECT id, type, payload, attempts
-       FROM outbox_tasks
-       WHERE status = 'pending'
-         AND available_at <= NOW()
-       ORDER BY created_at ASC
-       FOR UPDATE SKIP LOCKED
-       LIMIT 1`);
-        if (!rows[0]) {
-            await client.query("COMMIT");
-            return null;
-        }
-        await client.query(`UPDATE outbox_tasks
-       SET attempts = attempts + 1
-       WHERE id = $1`, [rows[0].id]);
+        const { rows } = await client.query(`WITH picked AS (
+         SELECT id
+         FROM outbox_tasks
+         WHERE status = 'pending'
+           AND available_at <= NOW()
+         ORDER BY created_at ASC
+         FOR UPDATE SKIP LOCKED
+         LIMIT 1
+       )
+       UPDATE outbox_tasks t
+       SET attempts = t.attempts + 1,
+           available_at = NOW() + INTERVAL '15 minutes'
+       FROM picked
+       WHERE t.id = picked.id
+       RETURNING t.id, t.type, t.payload, t.attempts`);
         await client.query("COMMIT");
-        return {
-            ...rows[0],
-            attempts: rows[0].attempts + 1,
-        };
+        return rows[0] ?? null;
     }
     catch (err) {
         await client.query("ROLLBACK");
@@ -44,12 +47,33 @@ async function claimNextTask() {
         client.release();
     }
 }
+async function patchOutboxPayload(id, payload) {
+    await pool_1.pool.query(`UPDATE outbox_tasks
+     SET payload = $2::jsonb
+     WHERE id = $1`, [id, JSON.stringify(payload)]);
+}
 async function processAwardGhlPoint(task) {
-    const { ghlContactId, pointsTotal } = task.payload;
-    const checkinDate = task.payload.checkinDate || (0, dates_1.calendarDateInShopTz)();
-    await (0, ghl_1.updateGhlCheckinProfile)(ghlContactId, pointsTotal, checkinDate);
-    await (0, ghl_1.addGhlCheckinNote)(ghlContactId, pointsTotal, checkinDate);
-    await (0, ghl_1.createGhlCheckinHistoryRecord)(ghlContactId, pointsTotal, checkinDate);
+    const payload = { ...task.payload };
+    const { ghlContactId, pointsTotal } = payload;
+    const checkinDate = payload.checkinDate || (0, dates_1.calendarDateInShopTz)();
+    if (!payload.ghlProfileUpdated) {
+        await (0, ghl_1.updateGhlCheckinProfile)(ghlContactId, pointsTotal, checkinDate);
+        payload.ghlProfileUpdated = true;
+        await patchOutboxPayload(task.id, payload);
+    }
+    if (!payload.ghlCheckinRecordId || !payload.ghlAssociated) {
+        const recordId = await (0, ghl_1.createGhlCheckinHistoryRecord)(ghlContactId, pointsTotal, checkinDate, payload.ghlCheckinRecordId);
+        if (recordId) {
+            payload.ghlCheckinRecordId = recordId;
+            payload.ghlAssociated = true;
+            await patchOutboxPayload(task.id, payload);
+        }
+    }
+    if (!payload.ghlNoteAdded) {
+        await (0, ghl_1.addGhlCheckinNote)(ghlContactId, pointsTotal, checkinDate);
+        payload.ghlNoteAdded = true;
+        await patchOutboxPayload(task.id, payload);
+    }
 }
 async function markDone(id) {
     await pool_1.pool.query(`UPDATE outbox_tasks

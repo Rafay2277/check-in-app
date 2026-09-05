@@ -44,7 +44,26 @@ exports.authRouter.post("/start", async (req, res) => {
         });
         return;
     }
-    // V1 demo path: no Twilio — GHL match is enough to issue a session
+    let inPipeline = false;
+    try {
+        inPipeline = await (0, ghl_1.contactInAllowedPipelines)(contact.id);
+    }
+    catch (err) {
+        console.error("auth/start pipeline check failed", err);
+        res.status(502).json({
+            error: "Could not verify membership — please try again",
+            code: "PIPELINE_CHECK_FAILED",
+        });
+        return;
+    }
+    if (!inPipeline) {
+        res.status(403).json({
+            error: "Not Available",
+            code: "NOT_AVAILABLE",
+        });
+        return;
+    }
+    // V1 demo path: no Twilio — GHL match + allowed pipeline is enough to issue a session
     if (config_1.env.SKIP_SMS_OTP) {
         try {
             const session = await (0, pool_1.withTransaction)(async (client) => {

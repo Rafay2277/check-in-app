@@ -7,12 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "checkin",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#111111"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fourtillfour.checkin",
@@ -31,7 +25,17 @@
       "expo-router",
       "expo-secure-store",
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#111111",
+          "imageWidth": 200
+        }
+      ]
     ],
     "extra": {
       "apiBaseUrl": "https://dashboard.nouraiz.com",

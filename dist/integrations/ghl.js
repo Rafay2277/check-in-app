@@ -4,6 +4,7 @@ exports.normalizePointsFieldKey = normalizePointsFieldKey;
 exports.normalizeCustomObjectFieldKey = normalizeCustomObjectFieldKey;
 exports.createGhlCheckinHistoryRecord = createGhlCheckinHistoryRecord;
 exports.findGhlContactByPhone = findGhlContactByPhone;
+exports.contactInAllowedPipelines = contactInAllowedPipelines;
 exports.searchGhlContacts = searchGhlContacts;
 exports.getGhlPointsTotal = getGhlPointsTotal;
 exports.updateGhlCheckinProfile = updateGhlCheckinProfile;
@@ -101,49 +102,56 @@ async function resolveCheckinAssociation(schemaKey) {
 /**
  * One Custom Object record per visit, associated to the Contact (history for automations).
  * No-ops when object key is empty or association cannot be resolved.
+ *
+ * Pass `existingRecordId` on outbox retries so we associate the same record
+ * instead of creating a second "Check-in YYYY-MM-DD" entry.
+ * Returns the GHL record id (or null when skipped).
  */
-async function createGhlCheckinHistoryRecord(ghlContactId, pointsTotal, checkinDate) {
+async function createGhlCheckinHistoryRecord(ghlContactId, pointsTotal, checkinDate, existingRecordId) {
     const schemaKey = config_1.env.GHL_CHECKIN_OBJECT_KEY?.trim();
     if (!schemaKey)
-        return;
+        return null;
     if (config_1.env.MOCK_INTEGRATIONS) {
         console.log(`[MOCK GHL] create ${schemaKey} record date=${checkinDate} points=${pointsTotal} for contact ${ghlContactId}`);
-        return;
+        return existingRecordId || `mock_checkin_${checkinDate}`;
     }
     const association = await resolveCheckinAssociation(schemaKey);
     if (!association) {
         console.warn("[ghl] skipping check-in history record: set GHL_CHECKIN_ASSOCIATION_ID " +
             "(Settings → Custom Objects → Associations) and ensure the Private Integration " +
             "has objects/record.write + associations/relation.write (+ associations.readonly to auto-resolve).");
-        return;
+        return null;
     }
-    const dateKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_DATE_FIELD_KEY || "checkin_date");
-    const pointsKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_POINTS_FIELD_KEY || "points_total");
-    const nameKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_NAME_FIELD_KEY || "check_in");
-    const properties = {
-        [dateKey]: checkinDate,
-        [pointsKey]: pointsTotal,
-    };
-    if (nameKey) {
-        // Primary display field on the Check-ins object (required by many GHL schemas).
-        properties[nameKey] = `Check-in ${checkinDate}`;
-    }
-    const createRes = await fetch(`${config_1.env.GHL_API_BASE_URL}/objects/${encodeURIComponent(schemaKey)}/records`, {
-        method: "POST",
-        headers: ghlHeaders(),
-        body: JSON.stringify({
-            locationId: config_1.env.GHL_LOCATION_ID,
-            properties,
-        }),
-    });
-    if (!createRes.ok) {
-        const text = await createRes.text();
-        throw new Error(`GHL create check-in record failed (${createRes.status}): ${text}`);
-    }
-    const created = (await createRes.json());
-    const recordId = created.record?.id || created.id;
+    let recordId = existingRecordId?.trim() || "";
     if (!recordId) {
-        throw new Error(`GHL create check-in record returned no id: ${JSON.stringify(created)}`);
+        const dateKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_DATE_FIELD_KEY || "checkin_date");
+        const pointsKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_POINTS_FIELD_KEY || "points_total");
+        const nameKey = normalizeCustomObjectFieldKey(config_1.env.GHL_CHECKIN_OBJECT_NAME_FIELD_KEY || "check_in");
+        const properties = {
+            [dateKey]: checkinDate,
+            [pointsKey]: pointsTotal,
+        };
+        if (nameKey) {
+            // Primary display field on the Check-ins object (required by many GHL schemas).
+            properties[nameKey] = `Check-in ${checkinDate}`;
+        }
+        const createRes = await fetch(`${config_1.env.GHL_API_BASE_URL}/objects/${encodeURIComponent(schemaKey)}/records`, {
+            method: "POST",
+            headers: ghlHeaders(),
+            body: JSON.stringify({
+                locationId: config_1.env.GHL_LOCATION_ID,
+                properties,
+            }),
+        });
+        if (!createRes.ok) {
+            const text = await createRes.text();
+            throw new Error(`GHL create check-in record failed (${createRes.status}): ${text}`);
+        }
+        const created = (await createRes.json());
+        recordId = created.record?.id || created.id || "";
+        if (!recordId) {
+            throw new Error(`GHL create check-in record returned no id: ${JSON.stringify(created)}`);
+        }
     }
     const firstRecordId = association.contactIsFirst ? ghlContactId : recordId;
     const secondRecordId = association.contactIsFirst ? recordId : ghlContactId;
@@ -159,8 +167,14 @@ async function createGhlCheckinHistoryRecord(ghlContactId, pointsTotal, checkinD
     });
     if (!relRes.ok) {
         const text = await relRes.text();
+        // Retry after a successful create often hits "already associated".
+        if (relRes.status === 409 ||
+            /already|exist|duplicate/i.test(text)) {
+            return recordId;
+        }
         throw new Error(`GHL associate check-in record failed (${relRes.status}): ${text}`);
     }
+    return recordId;
 }
 async function findGhlContactByPhone(phoneE164) {
     if (config_1.env.MOCK_INTEGRATIONS) {
@@ -188,6 +202,105 @@ async function findGhlContactByPhone(phoneE164) {
     }
     // Fallback: contacts list query
     return searchGhlContactsByPhone(phoneE164);
+}
+/** Cached allowed pipeline ids for this process (resolved by name). */
+let cachedAllowedPipelineIds;
+let cachedAllowedPipelineWarn = false;
+function allowedPipelineNames() {
+    return config_1.env.GHL_ALLOWED_PIPELINE_NAMES.split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+}
+async function resolveAllowedPipelineIds() {
+    if (cachedAllowedPipelineIds !== undefined) {
+        return cachedAllowedPipelineIds;
+    }
+    const wanted = new Set(allowedPipelineNames());
+    if (wanted.size === 0) {
+        cachedAllowedPipelineIds = [];
+        return cachedAllowedPipelineIds;
+    }
+    const url = new URL(`${config_1.env.GHL_API_BASE_URL}/opportunities/pipelines`);
+    url.searchParams.set("locationId", config_1.env.GHL_LOCATION_ID);
+    const res = await fetch(url.toString(), {
+        method: "GET",
+        headers: ghlHeaders(),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`GHL list pipelines failed (${res.status}): ${text}`);
+    }
+    const data = (await res.json());
+    const matched = (data.pipelines ?? [])
+        .filter((p) => p.id && p.name && wanted.has(p.name.trim().toLowerCase()))
+        .map((p) => p.id);
+    if (matched.length === 0 && !cachedAllowedPipelineWarn) {
+        cachedAllowedPipelineWarn = true;
+        console.warn(`[ghl] no pipelines matched allowed names [${[...wanted].join(", ")}]. ` +
+            `Check GHL_ALLOWED_PIPELINE_NAMES and Private Integration scope opportunities.readonly.`);
+    }
+    cachedAllowedPipelineIds = matched;
+    return cachedAllowedPipelineIds;
+}
+async function contactHasOpportunityInPipeline(ghlContactId, pipelineId) {
+    // Marketplace docs use camelCase; some clients send snake_case — try camel first.
+    const attempts = [
+        {
+            locationId: config_1.env.GHL_LOCATION_ID,
+            contactId: ghlContactId,
+            pipelineId,
+            status: "all",
+            limit: "1",
+        },
+        {
+            location_id: config_1.env.GHL_LOCATION_ID,
+            contact_id: ghlContactId,
+            pipeline_id: pipelineId,
+            status: "all",
+            limit: "1",
+        },
+    ];
+    let lastError = "";
+    for (const params of attempts) {
+        const url = new URL(`${config_1.env.GHL_API_BASE_URL}/opportunities/search`);
+        for (const [k, v] of Object.entries(params)) {
+            url.searchParams.set(k, v);
+        }
+        const res = await fetch(url.toString(), {
+            method: "GET",
+            headers: ghlHeaders(),
+        });
+        if (res.ok) {
+            const data = (await res.json());
+            return (data.opportunities?.length ?? 0) > 0;
+        }
+        lastError = await res.text();
+        // Retry alternate param style only on 4xx validation-style errors.
+        if (res.status < 400 || res.status >= 500) {
+            throw new Error(`GHL opportunity search failed (${res.status}): ${lastError}`);
+        }
+    }
+    throw new Error(`GHL opportunity search failed: ${lastError}`);
+}
+/**
+ * True when the contact has an opportunity in Active Member or Car Community
+ * (or whatever is configured in GHL_ALLOWED_PIPELINE_NAMES).
+ */
+async function contactInAllowedPipelines(ghlContactId) {
+    if (config_1.env.MOCK_INTEGRATIONS) {
+        console.log(`[MOCK GHL] pipeline membership check for contact ${ghlContactId} → allow`);
+        return true;
+    }
+    const pipelineIds = await resolveAllowedPipelineIds();
+    if (pipelineIds.length === 0) {
+        return false;
+    }
+    for (const pipelineId of pipelineIds) {
+        if (await contactHasOpportunityInPipeline(ghlContactId, pipelineId)) {
+            return true;
+        }
+    }
+    return false;
 }
 async function searchGhlContactsByPhone(phoneE164) {
     const contacts = await searchGhlContacts(phoneE164, 1);

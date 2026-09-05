@@ -15,9 +15,18 @@ export declare function normalizeCustomObjectFieldKey(raw: string): string;
 /**
  * One Custom Object record per visit, associated to the Contact (history for automations).
  * No-ops when object key is empty or association cannot be resolved.
+ *
+ * Pass `existingRecordId` on outbox retries so we associate the same record
+ * instead of creating a second "Check-in YYYY-MM-DD" entry.
+ * Returns the GHL record id (or null when skipped).
  */
-export declare function createGhlCheckinHistoryRecord(ghlContactId: string, pointsTotal: number, checkinDate: string): Promise<void>;
+export declare function createGhlCheckinHistoryRecord(ghlContactId: string, pointsTotal: number, checkinDate: string, existingRecordId?: string): Promise<string | null>;
 export declare function findGhlContactByPhone(phoneE164: string): Promise<GhlContact | null>;
+/**
+ * True when the contact has an opportunity in Active Member or Car Community
+ * (or whatever is configured in GHL_ALLOWED_PIPELINE_NAMES).
+ */
+export declare function contactInAllowedPipelines(ghlContactId: string): Promise<boolean>;
 /**
  * Free-text contact search (name or phone) against GHL directory.
  * Read-only; used by staff scanner lookup.
