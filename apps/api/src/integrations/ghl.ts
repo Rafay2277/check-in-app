@@ -133,20 +133,25 @@ async function resolveCheckinAssociation(
 /**
  * One Custom Object record per visit, associated to the Contact (history for automations).
  * No-ops when object key is empty or association cannot be resolved.
+ *
+ * Pass `existingRecordId` on outbox retries so we associate the same record
+ * instead of creating a second "Check-in YYYY-MM-DD" entry.
+ * Returns the GHL record id (or null when skipped).
  */
 export async function createGhlCheckinHistoryRecord(
   ghlContactId: string,
   pointsTotal: number,
-  checkinDate: string
-): Promise<void> {
+  checkinDate: string,
+  existingRecordId?: string
+): Promise<string | null> {
   const schemaKey = env.GHL_CHECKIN_OBJECT_KEY?.trim();
-  if (!schemaKey) return;
+  if (!schemaKey) return null;
 
   if (env.MOCK_INTEGRATIONS) {
     console.log(
       `[MOCK GHL] create ${schemaKey} record date=${checkinDate} points=${pointsTotal} for contact ${ghlContactId}`
     );
-    return;
+    return existingRecordId || `mock_checkin_${checkinDate}`;
   }
 
   const association = await resolveCheckinAssociation(schemaKey);
@@ -156,56 +161,60 @@ export async function createGhlCheckinHistoryRecord(
         "(Settings → Custom Objects → Associations) and ensure the Private Integration " +
         "has objects/record.write + associations/relation.write (+ associations.readonly to auto-resolve)."
     );
-    return;
+    return null;
   }
 
-  const dateKey = normalizeCustomObjectFieldKey(
-    env.GHL_CHECKIN_OBJECT_DATE_FIELD_KEY || "checkin_date"
-  );
-  const pointsKey = normalizeCustomObjectFieldKey(
-    env.GHL_CHECKIN_OBJECT_POINTS_FIELD_KEY || "points_total"
-  );
-  const nameKey = normalizeCustomObjectFieldKey(
-    env.GHL_CHECKIN_OBJECT_NAME_FIELD_KEY || "check_in"
-  );
+  let recordId = existingRecordId?.trim() || "";
 
-  const properties: Record<string, string | number> = {
-    [dateKey]: checkinDate,
-    [pointsKey]: pointsTotal,
-  };
-  if (nameKey) {
-    // Primary display field on the Check-ins object (required by many GHL schemas).
-    properties[nameKey] = `Check-in ${checkinDate}`;
-  }
-
-  const createRes = await fetch(
-    `${env.GHL_API_BASE_URL}/objects/${encodeURIComponent(schemaKey)}/records`,
-    {
-      method: "POST",
-      headers: ghlHeaders(),
-      body: JSON.stringify({
-        locationId: env.GHL_LOCATION_ID,
-        properties,
-      }),
-    }
-  );
-
-  if (!createRes.ok) {
-    const text = await createRes.text();
-    throw new Error(
-      `GHL create check-in record failed (${createRes.status}): ${text}`
-    );
-  }
-
-  const created = (await createRes.json()) as {
-    record?: { id?: string };
-    id?: string;
-  };
-  const recordId = created.record?.id || created.id;
   if (!recordId) {
-    throw new Error(
-      `GHL create check-in record returned no id: ${JSON.stringify(created)}`
+    const dateKey = normalizeCustomObjectFieldKey(
+      env.GHL_CHECKIN_OBJECT_DATE_FIELD_KEY || "checkin_date"
     );
+    const pointsKey = normalizeCustomObjectFieldKey(
+      env.GHL_CHECKIN_OBJECT_POINTS_FIELD_KEY || "points_total"
+    );
+    const nameKey = normalizeCustomObjectFieldKey(
+      env.GHL_CHECKIN_OBJECT_NAME_FIELD_KEY || "check_in"
+    );
+
+    const properties: Record<string, string | number> = {
+      [dateKey]: checkinDate,
+      [pointsKey]: pointsTotal,
+    };
+    if (nameKey) {
+      // Primary display field on the Check-ins object (required by many GHL schemas).
+      properties[nameKey] = `Check-in ${checkinDate}`;
+    }
+
+    const createRes = await fetch(
+      `${env.GHL_API_BASE_URL}/objects/${encodeURIComponent(schemaKey)}/records`,
+      {
+        method: "POST",
+        headers: ghlHeaders(),
+        body: JSON.stringify({
+          locationId: env.GHL_LOCATION_ID,
+          properties,
+        }),
+      }
+    );
+
+    if (!createRes.ok) {
+      const text = await createRes.text();
+      throw new Error(
+        `GHL create check-in record failed (${createRes.status}): ${text}`
+      );
+    }
+
+    const created = (await createRes.json()) as {
+      record?: { id?: string };
+      id?: string;
+    };
+    recordId = created.record?.id || created.id || "";
+    if (!recordId) {
+      throw new Error(
+        `GHL create check-in record returned no id: ${JSON.stringify(created)}`
+      );
+    }
   }
 
   const firstRecordId = association.contactIsFirst ? ghlContactId : recordId;
@@ -227,10 +236,19 @@ export async function createGhlCheckinHistoryRecord(
 
   if (!relRes.ok) {
     const text = await relRes.text();
+    // Retry after a successful create often hits "already associated".
+    if (
+      relRes.status === 409 ||
+      /already|exist|duplicate/i.test(text)
+    ) {
+      return recordId;
+    }
     throw new Error(
       `GHL associate check-in record failed (${relRes.status}): ${text}`
     );
   }
+
+  return recordId;
 }
 
 export async function findGhlContactByPhone(
@@ -265,6 +283,146 @@ export async function findGhlContactByPhone(
 
   // Fallback: contacts list query
   return searchGhlContactsByPhone(phoneE164);
+}
+
+type GhlPipeline = {
+  id?: string;
+  name?: string;
+};
+
+/** Cached allowed pipeline ids for this process (resolved by name). */
+let cachedAllowedPipelineIds: string[] | undefined;
+let cachedAllowedPipelineWarn = false;
+
+function allowedPipelineNames(): string[] {
+  return env.GHL_ALLOWED_PIPELINE_NAMES.split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+async function resolveAllowedPipelineIds(): Promise<string[]> {
+  if (cachedAllowedPipelineIds !== undefined) {
+    return cachedAllowedPipelineIds;
+  }
+
+  const wanted = new Set(allowedPipelineNames());
+  if (wanted.size === 0) {
+    cachedAllowedPipelineIds = [];
+    return cachedAllowedPipelineIds;
+  }
+
+  const url = new URL(`${env.GHL_API_BASE_URL}/opportunities/pipelines`);
+  url.searchParams.set("locationId", env.GHL_LOCATION_ID);
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: ghlHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(
+      `GHL list pipelines failed (${res.status}): ${text}`
+    );
+  }
+
+  const data = (await res.json()) as {
+    pipelines?: GhlPipeline[];
+  };
+  const matched = (data.pipelines ?? [])
+    .filter((p) => p.id && p.name && wanted.has(p.name.trim().toLowerCase()))
+    .map((p) => p.id as string);
+
+  if (matched.length === 0 && !cachedAllowedPipelineWarn) {
+    cachedAllowedPipelineWarn = true;
+    console.warn(
+      `[ghl] no pipelines matched allowed names [${[...wanted].join(", ")}]. ` +
+        `Check GHL_ALLOWED_PIPELINE_NAMES and Private Integration scope opportunities.readonly.`
+    );
+  }
+
+  cachedAllowedPipelineIds = matched;
+  return cachedAllowedPipelineIds;
+}
+
+async function contactHasOpportunityInPipeline(
+  ghlContactId: string,
+  pipelineId: string
+): Promise<boolean> {
+  // Marketplace docs use camelCase; some clients send snake_case — try camel first.
+  const attempts: Array<Record<string, string>> = [
+    {
+      locationId: env.GHL_LOCATION_ID,
+      contactId: ghlContactId,
+      pipelineId,
+      status: "all",
+      limit: "1",
+    },
+    {
+      location_id: env.GHL_LOCATION_ID,
+      contact_id: ghlContactId,
+      pipeline_id: pipelineId,
+      status: "all",
+      limit: "1",
+    },
+  ];
+
+  let lastError = "";
+  for (const params of attempts) {
+    const url = new URL(`${env.GHL_API_BASE_URL}/opportunities/search`);
+    for (const [k, v] of Object.entries(params)) {
+      url.searchParams.set(k, v);
+    }
+
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: ghlHeaders(),
+    });
+
+    if (res.ok) {
+      const data = (await res.json()) as {
+        opportunities?: unknown[];
+      };
+      return (data.opportunities?.length ?? 0) > 0;
+    }
+
+    lastError = await res.text();
+    // Retry alternate param style only on 4xx validation-style errors.
+    if (res.status < 400 || res.status >= 500) {
+      throw new Error(
+        `GHL opportunity search failed (${res.status}): ${lastError}`
+      );
+    }
+  }
+
+  throw new Error(`GHL opportunity search failed: ${lastError}`);
+}
+
+/**
+ * True when the contact has an opportunity in Active Member or Car Community
+ * (or whatever is configured in GHL_ALLOWED_PIPELINE_NAMES).
+ */
+export async function contactInAllowedPipelines(
+  ghlContactId: string
+): Promise<boolean> {
+  if (env.MOCK_INTEGRATIONS) {
+    console.log(
+      `[MOCK GHL] pipeline membership check for contact ${ghlContactId} → allow`
+    );
+    return true;
+  }
+
+  const pipelineIds = await resolveAllowedPipelineIds();
+  if (pipelineIds.length === 0) {
+    return false;
+  }
+
+  for (const pipelineId of pipelineIds) {
+    if (await contactHasOpportunityInPipeline(ghlContactId, pipelineId)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function searchGhlContactsByPhone(

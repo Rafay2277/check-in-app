@@ -89,6 +89,14 @@ const envSchema = z.object({
    * Required to write history unless associations.readonly can auto-resolve it.
    */
   GHL_CHECKIN_ASSOCIATION_ID: z.string().optional().default(""),
+  /**
+   * Comma-separated GHL opportunity pipeline names allowed to log in.
+   * Contact must have an opportunity in at least one of these pipelines.
+   */
+  GHL_ALLOWED_PIPELINE_NAMES: z
+    .string()
+    .optional()
+    .default("Active Member,Car Community"),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().default(3000),
   OUTBOX_MAX_ATTEMPTS: z.coerce.number().default(8),
   /** Calendar day for permanent-card daily limit (IANA tz). */

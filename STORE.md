@@ -15,7 +15,7 @@ OTP / SMS verification is intentionally **skipped for now** (`SKIP_SMS_OTP=true`
 
 - iOS bundle ID: `com.fourtillfour.checkin`
 - Android package: `com.fourtillfour.checkin`
-- Display name: fourtillfour Check-In
+- Display name: Fourtillfour
 - Version: `1.0.0` (EAS remote versioning)
 
 ## Play feature graphic
