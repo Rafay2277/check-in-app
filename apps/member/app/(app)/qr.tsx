@@ -1,15 +1,18 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
+import { fetchCheckinTokenStatus } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { BrandMark } from "../../src/BrandMark";
 import { Screen } from "../../src/Screen";
 import { colors, fonts, radii } from "../../src/theme";
 
+type Phase = "waiting" | "success" | "expired";
+
 export default function QrScreen() {
   const router = useRouter();
-  const { member } = useAuth();
+  const { member, setMember, refreshProfile } = useAuth();
   const params = useLocalSearchParams<{ payload: string; expiresAt: string }>();
   const rawPayload = Array.isArray(params.payload)
     ? params.payload[0]
@@ -22,17 +25,108 @@ export default function QrScreen() {
   const [remaining, setRemaining] = useState(() =>
     Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000))
   );
+  const [phase, setPhase] = useState<Phase>(() =>
+    expiresAtMs <= Date.now() ? "expired" : "waiting"
+  );
+  const [pointsTotal, setPointsTotal] = useState<number | null>(
+    member?.pointsTotal ?? null
+  );
+  const successHandled = useRef(false);
 
   useEffect(() => {
+    if (phase !== "waiting") return;
     const id = setInterval(() => {
-      setRemaining(Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000)));
+      const left = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+      setRemaining(left);
+      if (left <= 0) setPhase("expired");
     }, 500);
     return () => clearInterval(id);
-  }, [expiresAtMs]);
+  }, [expiresAtMs, phase]);
+
+  // Poll until staff marks the token used
+  useEffect(() => {
+    if (phase !== "waiting" || !payload) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    async function tick() {
+      try {
+        const status = await fetchCheckinTokenStatus(payload);
+        if (cancelled) return;
+        if (status.status === "used") {
+          if (successHandled.current) return;
+          successHandled.current = true;
+          setPointsTotal(status.pointsTotal);
+          setPhase("success");
+          try {
+            await refreshProfile();
+          } catch {
+            if (member) {
+              setMember({ ...member, pointsTotal: status.pointsTotal });
+            }
+          }
+          return;
+        }
+        if (status.status === "expired") {
+          setPhase("expired");
+          return;
+        }
+      } catch {
+        // Keep waiting — brief network blips shouldn't kill the QR screen
+      }
+      if (!cancelled) {
+        timer = setTimeout(tick, 2000);
+      }
+    }
+
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [phase, payload, refreshProfile, member, setMember]);
+
+  // Auto-close success after a short celebration
+  useEffect(() => {
+    if (phase !== "success") return;
+    const id = setTimeout(() => {
+      router.replace("/(app)/home");
+    }, 3200);
+    return () => clearTimeout(id);
+  }, [phase, router]);
 
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
-  const expired = remaining <= 0;
+
+  if (phase === "success") {
+    return (
+      <Screen contentStyle={styles.safe}>
+        <View style={styles.hero}>
+          <BrandMark size={92} />
+        </View>
+        <View style={styles.card}>
+          <View style={styles.successBadge}>
+            <Text style={styles.successCheck}>✓</Text>
+          </View>
+          <Text style={styles.title}>You're checked in</Text>
+          <Text style={styles.copy}>
+            Thanks for visiting fourtillfour. Your visit has been recorded
+            {pointsTotal != null ? ` — ${pointsTotal} points` : ""}.
+          </Text>
+          <Text style={styles.timer}>Returning home…</Text>
+          <Pressable
+            style={styles.done}
+            onPress={() => router.replace("/(app)/home")}
+          >
+            <Text style={styles.doneText}>Back to home</Text>
+          </Pressable>
+        </View>
+      </Screen>
+    );
+  }
+
+  const expired = phase === "expired";
 
   return (
     <Screen contentStyle={styles.safe}>
@@ -51,7 +145,7 @@ export default function QrScreen() {
         <Text style={styles.copy}>
           {expired
             ? "Go back and check in again."
-            : "Show this QR to staff so they can approve your visit and points."}
+            : "Show this QR to staff. This screen will update automatically when they approve your visit."}
         </Text>
 
         <View style={[styles.qrWrap, expired && styles.qrExpired]}>
@@ -81,7 +175,7 @@ export default function QrScreen() {
           style={styles.done}
           onPress={() => router.replace("/(app)/home")}
         >
-          <Text style={styles.doneText}>Done</Text>
+          <Text style={styles.doneText}>{expired ? "Back" : "Cancel"}</Text>
         </Pressable>
       </View>
     </Screen>
@@ -123,6 +217,24 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontSize: 12,
     lineHeight: 14,
+    fontFamily: fonts.sansBold,
+  },
+  successBadge: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(2, 142, 72, 0.18)",
+    borderWidth: 1.5,
+    borderColor: colors.ok,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 28,
+    marginBottom: 8,
+  },
+  successCheck: {
+    color: colors.ok,
+    fontSize: 34,
+    lineHeight: 38,
     fontFamily: fonts.sansBold,
   },
   title: {

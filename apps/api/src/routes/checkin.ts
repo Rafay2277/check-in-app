@@ -105,3 +105,56 @@ checkinRouter.get("/token/active", async (req: AuthedRequest, res) => {
     publicBaseUrl: env.PUBLIC_BASE_URL,
   });
 });
+
+/**
+ * Member polls while showing QR — returns unused | used | expired.
+ * Scoped to the signed-in member so tokens cannot be probed across accounts.
+ */
+checkinRouter.get("/token/:token/status", async (req: AuthedRequest, res) => {
+  const token = String(req.params.token || "").trim();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      token
+    )
+  ) {
+    res.status(400).json({ error: "Invalid token" });
+    return;
+  }
+
+  const { rows } = await query<{
+    status: string;
+    created_at: Date;
+    used_at: Date | null;
+    points_total: number;
+  }>(
+    `SELECT ct.status::text AS status,
+            ct.created_at,
+            ct.used_at,
+            m.points_total
+     FROM checkin_tokens ct
+     INNER JOIN members m ON m.id = ct.member_id
+     WHERE ct.token = $1::uuid
+       AND ct.member_id = $2
+     LIMIT 1`,
+    [token, req.memberId]
+  );
+
+  if (!rows[0]) {
+    res.status(404).json({ error: "Token not found", status: "unknown" });
+    return;
+  }
+
+  const row = rows[0];
+  let status = row.status;
+  const expiresAt = new Date(row.created_at.getTime() + 15 * 60 * 1000);
+  if (status === "unused" && expiresAt.getTime() <= Date.now()) {
+    status = "expired";
+  }
+
+  res.json({
+    status,
+    usedAt: row.used_at ? row.used_at.toISOString() : null,
+    expiresAt: expiresAt.toISOString(),
+    pointsTotal: row.points_total,
+  });
+});

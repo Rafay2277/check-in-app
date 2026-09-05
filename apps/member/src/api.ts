@@ -156,6 +156,29 @@ export async function createCheckinToken(): Promise<CheckinToken> {
   return data as CheckinToken;
 }
 
+export type CheckinTokenStatus = {
+  status: "unused" | "used" | "expired" | "unknown" | string;
+  usedAt: string | null;
+  expiresAt: string;
+  pointsTotal: number;
+};
+
+/** Poll while QR is shown — becomes `used` after staff scan. */
+export async function fetchCheckinTokenStatus(
+  token: string
+): Promise<CheckinTokenStatus> {
+  const res = await apiFetch(
+    `/api/checkin/token/${encodeURIComponent(token)}/status`,
+    {},
+    true
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Could not check status");
+  }
+  return data as CheckinTokenStatus;
+}
+
 export async function deleteAccount(): Promise<void> {
   const res = await apiFetch("/api/auth/account", { method: "DELETE" }, true);
   const data = await res.json().catch(() => ({}));
