@@ -87,15 +87,6 @@ export default function QrScreen() {
     };
   }, [phase, payload, refreshProfile, member, setMember]);
 
-  // Auto-close success after a short celebration
-  useEffect(() => {
-    if (phase !== "success") return;
-    const id = setTimeout(() => {
-      router.replace("/(app)/home");
-    }, 3200);
-    return () => clearTimeout(id);
-  }, [phase, router]);
-
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
 
@@ -114,7 +105,6 @@ export default function QrScreen() {
             Thanks for visiting fourtillfour. Your visit has been recorded
             {pointsTotal != null ? ` — ${pointsTotal} points` : ""}.
           </Text>
-          <Text style={styles.timer}>Returning home…</Text>
           <Pressable
             style={styles.done}
             onPress={() => router.replace("/(app)/home")}

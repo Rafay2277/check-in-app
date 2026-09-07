@@ -5,6 +5,8 @@ const express_1 = require("express");
 const pool_1 = require("../db/pool");
 const auth_1 = require("../middleware/auth");
 const config_1 = require("../config");
+const dates_1 = require("../lib/dates");
+const dailyCheckin_1 = require("../lib/dailyCheckin");
 exports.checkinRouter = (0, express_1.Router)();
 exports.checkinRouter.use(auth_1.requireMemberAuth);
 exports.checkinRouter.get("/me", async (req, res) => {
@@ -14,17 +16,33 @@ exports.checkinRouter.get("/me", async (req, res) => {
         res.status(404).json({ error: "Member not found" });
         return;
     }
+    const checkedInToday = await (0, dailyCheckin_1.memberCheckedInToday)(member.id);
     res.json({
         id: member.id,
         name: member.name,
         phoneNumber: member.phone_number,
         pointsTotal: member.points_total,
+        checkedInToday,
+        checkinDate: (0, dates_1.calendarDateInShopTz)(),
     });
 });
 /**
  * Member confirms check-in → mint a single-use QR token (15 min TTL).
+ * Blocked if they already checked in today (shop timezone).
  */
 exports.checkinRouter.post("/token", async (req, res) => {
+    if (!req.memberId) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+    }
+    if (await (0, dailyCheckin_1.memberCheckedInToday)(req.memberId)) {
+        res.status(409).json({
+            error: "You've already checked in today. Please visit again tomorrow.",
+            code: "ALREADY_CHECKED_IN_TODAY",
+            checkinDate: (0, dates_1.calendarDateInShopTz)(),
+        });
+        return;
+    }
     // Expire any older unused tokens for this member (housekeeping; CAS still gates redeem)
     await (0, pool_1.query)(`UPDATE checkin_tokens
      SET status = 'expired'

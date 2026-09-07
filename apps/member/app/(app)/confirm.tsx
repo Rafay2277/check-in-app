@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { createCheckinToken } from "../../src/api";
+import { ApiError, createCheckinToken } from "../../src/api";
 import { BrandMark } from "../../src/BrandMark";
 import { GhostButton, GoldButton } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
@@ -25,6 +25,10 @@ export default function ConfirmScreen() {
         },
       });
     } catch (err) {
+      if (err instanceof ApiError && err.code === "ALREADY_CHECKED_IN_TODAY") {
+        router.replace("/(app)/already-today");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Could not start check-in");
       setBusy(false);
     }

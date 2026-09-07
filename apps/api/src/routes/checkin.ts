@@ -2,6 +2,8 @@ import { Router } from "express";
 import { query } from "../db/pool";
 import { AuthedRequest, requireMemberAuth } from "../middleware/auth";
 import { env } from "../config";
+import { calendarDateInShopTz } from "../lib/dates";
+import { memberCheckedInToday } from "../lib/dailyCheckin";
 
 export const checkinRouter = Router();
 
@@ -24,18 +26,38 @@ checkinRouter.get("/me", async (req: AuthedRequest, res) => {
     return;
   }
 
+  const checkedInToday = await memberCheckedInToday(member.id);
+
   res.json({
     id: member.id,
     name: member.name,
     phoneNumber: member.phone_number,
     pointsTotal: member.points_total,
+    checkedInToday,
+    checkinDate: calendarDateInShopTz(),
   });
 });
 
 /**
  * Member confirms check-in → mint a single-use QR token (15 min TTL).
+ * Blocked if they already checked in today (shop timezone).
  */
 checkinRouter.post("/token", async (req: AuthedRequest, res) => {
+  if (!req.memberId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  if (await memberCheckedInToday(req.memberId)) {
+    res.status(409).json({
+      error:
+        "You've already checked in today. Please visit again tomorrow.",
+      code: "ALREADY_CHECKED_IN_TODAY",
+      checkinDate: calendarDateInShopTz(),
+    });
+    return;
+  }
+
   // Expire any older unused tokens for this member (housekeeping; CAS still gates redeem)
   await query(
     `UPDATE checkin_tokens

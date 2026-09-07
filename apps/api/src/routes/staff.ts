@@ -8,6 +8,10 @@ import { AuthedRequest, requireStaffAuth } from "../middleware/auth";
 import { getGhlPointsTotal } from "../integrations/ghl";
 import { calendarDateInShopTz } from "../lib/dates";
 import { drainOutboxOnce } from "../worker/outbox";
+import {
+  memberCheckedInToday,
+  tryRecordDailyCheckin,
+} from "../lib/dailyCheckin";
 
 export const staffRouter = Router();
 
@@ -126,12 +130,45 @@ async function readGhlPointsFloor(ghlContactId: string): Promise<number | null> 
   }
 }
 
-/** Existing app QR: single-use, 15-minute TTL. Unchanged CAS semantics. */
+/** Existing app QR: single-use, 15-minute TTL. One successful check-in per day. */
 async function tryValidateRotating(
   client: PoolClient,
   token: string,
   ghlPointsFloor: number | null
-): Promise<ValidateOk | null> {
+): Promise<ValidateOk | ValidateFail | null> {
+  const { rows: peek } = await client.query<{
+    member_id: string;
+  }>(
+    `SELECT member_id
+     FROM checkin_tokens
+     WHERE token = $1::uuid
+       AND status = 'unused'
+       AND created_at > NOW() - INTERVAL '15 minutes'
+     LIMIT 1
+     FOR UPDATE`,
+    [token]
+  );
+  if (peek.length === 0) return null;
+
+  const memberId = peek[0].member_id;
+  if (await memberCheckedInToday(memberId, client)) {
+    return {
+      approved: false,
+      reason: "already_checked_in_today",
+      error: "Already checked in today — try again tomorrow",
+    };
+  }
+
+  // Claim the daily slot first so a race cannot double-award.
+  const { recorded, checkinDate } = await tryRecordDailyCheckin(client, memberId);
+  if (!recorded) {
+    return {
+      approved: false,
+      reason: "already_checked_in_today",
+      error: "Already checked in today — try again tomorrow",
+    };
+  }
+
   const { rows } = await client.query<{
     member_id: string;
     token_id: string;
@@ -145,9 +182,23 @@ async function tryValidateRotating(
     [token]
   );
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    await client.query(
+      `DELETE FROM daily_checkins
+       WHERE member_id = $1 AND checkin_date = $2::date`,
+      [memberId, checkinDate]
+    );
+    return null;
+  }
 
-  const { member_id: memberId, token_id: tokenId } = rows[0];
+  const tokenId = rows[0].token_id;
+  await client.query(
+    `UPDATE daily_checkins
+     SET checkin_token_id = $3
+     WHERE member_id = $1 AND checkin_date = $2::date`,
+    [memberId, checkinDate, tokenId]
+  );
+
   const member = await awardPointAndOutbox(
     client,
     memberId,
@@ -155,7 +206,7 @@ async function tryValidateRotating(
     {
       checkinTokenId: tokenId,
       tokenKind: "rotating",
-      checkinDate: calendarDateInShopTz(),
+      checkinDate,
     },
     ghlPointsFloor
   );
@@ -209,15 +260,11 @@ async function tryValidatePermanent(
   );
   const checkinDate = dateRows[0].d;
 
-  const { rows: dailyRows } = await client.query<{ id: string }>(
-    `INSERT INTO daily_checkins (member_id, checkin_date, permanent_token_id)
-     VALUES ($1, $2::date, $3)
-     ON CONFLICT (member_id, checkin_date) DO NOTHING
-     RETURNING id`,
-    [permanent.member_id, checkinDate, permanent.id]
-  );
+  const { recorded } = await tryRecordDailyCheckin(client, permanent.member_id, {
+    permanentTokenId: permanent.id,
+  });
 
-  if (dailyRows.length === 0) {
+  if (!recorded) {
     return {
       approved: false,
       reason: "already_checked_in_today",
@@ -225,7 +272,14 @@ async function tryValidatePermanent(
     };
   }
 
-  const dailyId = dailyRows[0].id;
+  const dailyId = (
+    await client.query<{ id: string }>(
+      `SELECT id FROM daily_checkins
+       WHERE member_id = $1 AND checkin_date = $2::date
+       LIMIT 1`,
+      [permanent.member_id, checkinDate]
+    )
+  ).rows[0]?.id;
 
   try {
     const member = await awardPointAndOutbox(

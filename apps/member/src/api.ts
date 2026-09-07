@@ -9,6 +9,8 @@ export type Member = {
   name: string;
   phoneNumber: string;
   pointsTotal: number;
+  checkedInToday?: boolean;
+  checkinDate?: string;
 };
 
 export type CheckinToken = {
@@ -19,6 +21,13 @@ export type CheckinToken = {
   qrPayload: string;
 };
 
+export class ApiError extends Error {
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
 function apiBase(): string {
   const extra = Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined;
   return extra?.apiBaseUrl || process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000";
@@ -152,7 +161,12 @@ export async function createCheckinToken(): Promise<CheckinToken> {
     true
   );
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Could not create check-in");
+  if (!res.ok) {
+    throw new ApiError(
+      data.error || "Could not create check-in",
+      data.code as string | undefined
+    );
+  }
   return data as CheckinToken;
 }
 

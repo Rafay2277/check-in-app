@@ -8,8 +8,8 @@ const pool_1 = require("../db/pool");
 const tokens_1 = require("../lib/tokens");
 const auth_1 = require("../middleware/auth");
 const ghl_1 = require("../integrations/ghl");
-const dates_1 = require("../lib/dates");
 const outbox_1 = require("../worker/outbox");
+const dailyCheckin_1 = require("../lib/dailyCheckin");
 exports.staffRouter = (0, express_1.Router)();
 const pinSchema = zod_1.z.object({
     pin: zod_1.z.string().min(4).max(12),
@@ -76,21 +76,53 @@ async function readGhlPointsFloor(ghlContactId) {
         return null;
     }
 }
-/** Existing app QR: single-use, 15-minute TTL. Unchanged CAS semantics. */
+/** Existing app QR: single-use, 15-minute TTL. One successful check-in per day. */
 async function tryValidateRotating(client, token, ghlPointsFloor) {
+    const { rows: peek } = await client.query(`SELECT member_id
+     FROM checkin_tokens
+     WHERE token = $1::uuid
+       AND status = 'unused'
+       AND created_at > NOW() - INTERVAL '15 minutes'
+     LIMIT 1
+     FOR UPDATE`, [token]);
+    if (peek.length === 0)
+        return null;
+    const memberId = peek[0].member_id;
+    if (await (0, dailyCheckin_1.memberCheckedInToday)(memberId, client)) {
+        return {
+            approved: false,
+            reason: "already_checked_in_today",
+            error: "Already checked in today — try again tomorrow",
+        };
+    }
+    // Claim the daily slot first so a race cannot double-award.
+    const { recorded, checkinDate } = await (0, dailyCheckin_1.tryRecordDailyCheckin)(client, memberId);
+    if (!recorded) {
+        return {
+            approved: false,
+            reason: "already_checked_in_today",
+            error: "Already checked in today — try again tomorrow",
+        };
+    }
     const { rows } = await client.query(`UPDATE checkin_tokens
      SET status = 'used', used_at = NOW()
      WHERE token = $1::uuid
        AND status = 'unused'
        AND created_at > NOW() - INTERVAL '15 minutes'
      RETURNING member_id, id AS token_id`, [token]);
-    if (rows.length === 0)
+    if (rows.length === 0) {
+        await client.query(`DELETE FROM daily_checkins
+       WHERE member_id = $1 AND checkin_date = $2::date`, [memberId, checkinDate]);
         return null;
-    const { member_id: memberId, token_id: tokenId } = rows[0];
+    }
+    const tokenId = rows[0].token_id;
+    await client.query(`UPDATE daily_checkins
+     SET checkin_token_id = $3
+     WHERE member_id = $1 AND checkin_date = $2::date`, [memberId, checkinDate, tokenId]);
     const member = await awardPointAndOutbox(client, memberId, `award_ghl_point:${tokenId}`, {
         checkinTokenId: tokenId,
         tokenKind: "rotating",
-        checkinDate: (0, dates_1.calendarDateInShopTz)(),
+        checkinDate,
     }, ghlPointsFloor);
     return {
         approved: true,
@@ -123,18 +155,19 @@ async function tryValidatePermanent(client, token, ghlPointsFloor) {
     }
     const { rows: dateRows } = await client.query(`SELECT (NOW() AT TIME ZONE $1)::date::text AS d`, [config_1.env.CHECKIN_CALENDAR_TZ]);
     const checkinDate = dateRows[0].d;
-    const { rows: dailyRows } = await client.query(`INSERT INTO daily_checkins (member_id, checkin_date, permanent_token_id)
-     VALUES ($1, $2::date, $3)
-     ON CONFLICT (member_id, checkin_date) DO NOTHING
-     RETURNING id`, [permanent.member_id, checkinDate, permanent.id]);
-    if (dailyRows.length === 0) {
+    const { recorded } = await (0, dailyCheckin_1.tryRecordDailyCheckin)(client, permanent.member_id, {
+        permanentTokenId: permanent.id,
+    });
+    if (!recorded) {
         return {
             approved: false,
             reason: "already_checked_in_today",
             error: "Already checked in today — try again tomorrow",
         };
     }
-    const dailyId = dailyRows[0].id;
+    const dailyId = (await client.query(`SELECT id FROM daily_checkins
+       WHERE member_id = $1 AND checkin_date = $2::date
+       LIMIT 1`, [permanent.member_id, checkinDate])).rows[0]?.id;
     try {
         const member = await awardPointAndOutbox(client, permanent.member_id, `award_ghl_point:permanent:${permanent.id}:${checkinDate}`, {
             permanentTokenId: permanent.id,

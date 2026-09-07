@@ -72,9 +72,15 @@ export default function HomeScreen() {
 
       <View style={styles.actions}>
         <GoldButton
-          label="Check in"
+          label={member?.checkedInToday ? "Checked in today" : "Check in"}
           leading={<QrGlyph />}
-          onPress={() => router.push("/(app)/confirm")}
+          onPress={() =>
+            router.push(
+              member?.checkedInToday
+                ? "/(app)/already-today"
+                : "/(app)/confirm"
+            )
+          }
           disabled={loading}
         />
         <Pressable
