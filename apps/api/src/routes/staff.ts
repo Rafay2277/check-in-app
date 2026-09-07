@@ -151,21 +151,17 @@ async function tryValidateRotating(
   if (peek.length === 0) return null;
 
   const memberId = peek[0].member_id;
+
+  // Serialize check-ins for this member (prevents double award races).
+  await client.query(`SELECT id FROM members WHERE id = $1 FOR UPDATE`, [
+    memberId,
+  ]);
+
   if (await memberCheckedInToday(memberId, client)) {
     return {
       approved: false,
       reason: "already_checked_in_today",
-      error: "Already checked in today — try again tomorrow",
-    };
-  }
-
-  // Claim the daily slot first so a race cannot double-award.
-  const { recorded, checkinDate } = await tryRecordDailyCheckin(client, memberId);
-  if (!recorded) {
-    return {
-      approved: false,
-      reason: "already_checked_in_today",
-      error: "Already checked in today — try again tomorrow",
+      error: "Already checked in today. Please try again tomorrow.",
     };
   }
 
@@ -182,22 +178,12 @@ async function tryValidateRotating(
     [token]
   );
 
-  if (rows.length === 0) {
-    await client.query(
-      `DELETE FROM daily_checkins
-       WHERE member_id = $1 AND checkin_date = $2::date`,
-      [memberId, checkinDate]
-    );
-    return null;
-  }
+  if (rows.length === 0) return null;
 
   const tokenId = rows[0].token_id;
-  await client.query(
-    `UPDATE daily_checkins
-     SET checkin_token_id = $3
-     WHERE member_id = $1 AND checkin_date = $2::date`,
-    [memberId, checkinDate, tokenId]
-  );
+  const { checkinDate } = await tryRecordDailyCheckin(client, memberId, {
+    checkinTokenId: tokenId,
+  });
 
   const member = await awardPointAndOutbox(
     client,
@@ -268,7 +254,7 @@ async function tryValidatePermanent(
     return {
       approved: false,
       reason: "already_checked_in_today",
-      error: "Already checked in today — try again tomorrow",
+      error: "Already checked in today. Please try again tomorrow.",
     };
   }
 
@@ -423,9 +409,11 @@ staffRouter.post(
       });
     } catch (err) {
       console.error("staff/validate failed", err);
+      const detail = err instanceof Error ? err.message : String(err);
       res.status(500).json({
         approved: false,
         error: "Validation failed",
+        detail,
       });
     }
   }

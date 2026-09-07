@@ -88,20 +88,15 @@ async function tryValidateRotating(client, token, ghlPointsFloor) {
     if (peek.length === 0)
         return null;
     const memberId = peek[0].member_id;
+    // Serialize check-ins for this member (prevents double award races).
+    await client.query(`SELECT id FROM members WHERE id = $1 FOR UPDATE`, [
+        memberId,
+    ]);
     if (await (0, dailyCheckin_1.memberCheckedInToday)(memberId, client)) {
         return {
             approved: false,
             reason: "already_checked_in_today",
-            error: "Already checked in today — try again tomorrow",
-        };
-    }
-    // Claim the daily slot first so a race cannot double-award.
-    const { recorded, checkinDate } = await (0, dailyCheckin_1.tryRecordDailyCheckin)(client, memberId);
-    if (!recorded) {
-        return {
-            approved: false,
-            reason: "already_checked_in_today",
-            error: "Already checked in today — try again tomorrow",
+            error: "Already checked in today. Please try again tomorrow.",
         };
     }
     const { rows } = await client.query(`UPDATE checkin_tokens
@@ -110,15 +105,12 @@ async function tryValidateRotating(client, token, ghlPointsFloor) {
        AND status = 'unused'
        AND created_at > NOW() - INTERVAL '15 minutes'
      RETURNING member_id, id AS token_id`, [token]);
-    if (rows.length === 0) {
-        await client.query(`DELETE FROM daily_checkins
-       WHERE member_id = $1 AND checkin_date = $2::date`, [memberId, checkinDate]);
+    if (rows.length === 0)
         return null;
-    }
     const tokenId = rows[0].token_id;
-    await client.query(`UPDATE daily_checkins
-     SET checkin_token_id = $3
-     WHERE member_id = $1 AND checkin_date = $2::date`, [memberId, checkinDate, tokenId]);
+    const { checkinDate } = await (0, dailyCheckin_1.tryRecordDailyCheckin)(client, memberId, {
+        checkinTokenId: tokenId,
+    });
     const member = await awardPointAndOutbox(client, memberId, `award_ghl_point:${tokenId}`, {
         checkinTokenId: tokenId,
         tokenKind: "rotating",
@@ -162,7 +154,7 @@ async function tryValidatePermanent(client, token, ghlPointsFloor) {
         return {
             approved: false,
             reason: "already_checked_in_today",
-            error: "Already checked in today — try again tomorrow",
+            error: "Already checked in today. Please try again tomorrow.",
         };
     }
     const dailyId = (await client.query(`SELECT id FROM daily_checkins
@@ -279,9 +271,11 @@ exports.staffRouter.post("/validate", auth_1.requireStaffAuth, async (req, res) 
     }
     catch (err) {
         console.error("staff/validate failed", err);
+        const detail = err instanceof Error ? err.message : String(err);
         res.status(500).json({
             approved: false,
             error: "Validation failed",
+            detail,
         });
     }
 });
