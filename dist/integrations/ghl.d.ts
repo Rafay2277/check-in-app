@@ -1,4 +1,4 @@
-type GhlContact = {
+export type GhlContact = {
     id: string;
     firstName?: string;
     lastName?: string;
@@ -36,4 +36,3 @@ export declare function getGhlPointsTotal(ghlContactId: string): Promise<number 
 export declare function updateGhlCheckinProfile(ghlContactId: string, pointsTotal: number, checkinDate: string): Promise<void>;
 export declare function updateGhlPointsTotal(ghlContactId: string, pointsTotal: number): Promise<void>;
 export declare function addGhlCheckinNote(ghlContactId: string, pointsTotal: number, checkinDate?: string): Promise<void>;
-export {};

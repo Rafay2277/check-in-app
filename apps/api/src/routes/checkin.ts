@@ -51,7 +51,7 @@ checkinRouter.post("/token", async (req: AuthedRequest, res) => {
   if (await memberCheckedInToday(req.memberId)) {
     res.status(409).json({
       error:
-        "You've already checked in today. Please visit again tomorrow.",
+        "You have already checked in today. Please visit again tomorrow.",
       code: "ALREADY_CHECKED_IN_TODAY",
       checkinDate: calendarDateInShopTz(),
     });

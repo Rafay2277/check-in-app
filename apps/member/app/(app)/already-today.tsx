@@ -19,7 +19,7 @@ export default function AlreadyTodayScreen() {
         <Text style={styles.title}>Already checked in today</Text>
         <Text style={styles.copy}>
           Your visit for today has already been recorded. One check-in is
-          available per day — we look forward to seeing you again tomorrow.
+          available per day. We look forward to seeing you again tomorrow.
         </Text>
         <Pressable
           style={styles.done}

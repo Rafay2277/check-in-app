@@ -103,7 +103,7 @@ export default function QrScreen() {
           <Text style={styles.title}>You're checked in</Text>
           <Text style={styles.copy}>
             Thanks for visiting fourtillfour. Your visit has been recorded
-            {pointsTotal != null ? ` — ${pointsTotal} points` : ""}.
+            {pointsTotal != null ? `. You now have ${pointsTotal} points` : ""}.
           </Text>
           <Pressable
             style={styles.done}

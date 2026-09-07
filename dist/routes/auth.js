@@ -8,6 +8,7 @@ const phone_1 = require("../lib/phone");
 const tokens_1 = require("../lib/tokens");
 const config_1 = require("../config");
 const ghl_1 = require("../integrations/ghl");
+const nameMatch_1 = require("../lib/nameMatch");
 const twilio_1 = require("../integrations/twilio");
 const auth_1 = require("../middleware/auth");
 exports.authRouter = (0, express_1.Router)();
@@ -39,11 +40,20 @@ exports.authRouter.post("/start", async (req, res) => {
     const contact = await (0, ghl_1.findGhlContactByPhone)(phone);
     if (!contact) {
         res.status(404).json({
-            error: "We couldn't find your account — please check with staff",
+            error: "We couldn't find your account. Please check with staff",
             code: "CONTACT_NOT_FOUND",
         });
         return;
     }
+    if (!(0, nameMatch_1.loginNameMatchesContact)(parsed.data.name, contact)) {
+        res.status(403).json({
+            error: "Name and phone don't match the same account. Please check both and try again",
+            code: "NAME_PHONE_MISMATCH",
+        });
+        return;
+    }
+    // Prefer GHL canonical name so the app never shows a mismatched typed name.
+    const canonicalName = (0, nameMatch_1.contactFullName)(contact).trim() || parsed.data.name.trim();
     let inPipeline = false;
     try {
         inPipeline = await (0, ghl_1.contactInAllowedPipelines)(contact.id);
@@ -68,7 +78,7 @@ exports.authRouter.post("/start", async (req, res) => {
         try {
             const session = await (0, pool_1.withTransaction)(async (client) => {
                 const member = await upsertMember(client, {
-                    name: parsed.data.name,
+                    name: canonicalName,
                     phone,
                     ghlContactId: contact.id,
                 });
@@ -128,7 +138,7 @@ exports.authRouter.post("/start", async (req, res) => {
       (phone_number, name, ghl_contact_id, code_hash, max_attempts, expires_at, resend_available_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`, [
         phone,
-        parsed.data.name,
+        canonicalName,
         contact.id,
         codeHash,
         MAX_ATTEMPTS,

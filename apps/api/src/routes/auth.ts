@@ -17,6 +17,10 @@ import {
   contactInAllowedPipelines,
   findGhlContactByPhone,
 } from "../integrations/ghl";
+import {
+  contactFullName,
+  loginNameMatchesContact,
+} from "../lib/nameMatch";
 import { sendSmsOtp } from "../integrations/twilio";
 import { AuthedRequest, requireMemberAuth } from "../middleware/auth";
 
@@ -56,11 +60,24 @@ authRouter.post("/start", async (req, res) => {
   const contact = await findGhlContactByPhone(phone);
   if (!contact) {
     res.status(404).json({
-      error: "We couldn't find your account — please check with staff",
+      error: "We couldn't find your account. Please check with staff",
       code: "CONTACT_NOT_FOUND",
     });
     return;
   }
+
+  if (!loginNameMatchesContact(parsed.data.name, contact)) {
+    res.status(403).json({
+      error:
+        "Name and phone don't match the same account. Please check both and try again",
+      code: "NAME_PHONE_MISMATCH",
+    });
+    return;
+  }
+
+  // Prefer GHL canonical name so the app never shows a mismatched typed name.
+  const canonicalName =
+    contactFullName(contact).trim() || parsed.data.name.trim();
 
   let inPipeline = false;
   try {
@@ -86,7 +103,7 @@ authRouter.post("/start", async (req, res) => {
     try {
       const session = await withTransaction(async (client) => {
         const member = await upsertMember(client, {
-          name: parsed.data.name,
+          name: canonicalName,
           phone,
           ghlContactId: contact.id,
         });
@@ -161,7 +178,7 @@ authRouter.post("/start", async (req, res) => {
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       phone,
-      parsed.data.name,
+      canonicalName,
       contact.id,
       codeHash,
       MAX_ATTEMPTS,

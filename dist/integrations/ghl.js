@@ -182,6 +182,8 @@ async function findGhlContactByPhone(phoneE164) {
         return {
             id: `mock_${phoneE164.replace(/\D/g, "")}`,
             name: "Mock Member",
+            firstName: "Mock",
+            lastName: "Member",
             phone: phoneE164,
         };
     }
@@ -192,16 +194,37 @@ async function findGhlContactByPhone(phoneE164) {
         method: "GET",
         headers: ghlHeaders(),
     });
+    let contact = null;
     if (dupRes.ok) {
         const data = (await dupRes.json());
         if (data.contact?.id)
-            return data.contact;
+            contact = data.contact;
     }
-    if (dupRes.status === 404) {
+    else if (dupRes.status === 404) {
         return null;
     }
-    // Fallback: contacts list query
-    return searchGhlContactsByPhone(phoneE164);
+    else {
+        contact = await searchGhlContactsByPhone(phoneE164);
+    }
+    if (!contact?.id)
+        return null;
+    // Duplicate search sometimes omits name fields — hydrate for login name checks.
+    if (!contact.firstName && !contact.lastName && !contact.name) {
+        const full = await getGhlContactById(contact.id);
+        if (full)
+            return full;
+    }
+    return contact;
+}
+async function getGhlContactById(ghlContactId) {
+    const res = await fetch(`${config_1.env.GHL_API_BASE_URL}/contacts/${ghlContactId}`, {
+        method: "GET",
+        headers: ghlHeaders(),
+    });
+    if (!res.ok)
+        return null;
+    const data = (await res.json());
+    return data.contact?.id ? data.contact : null;
 }
 /** Cached allowed pipeline ids for this process (resolved by name). */
 let cachedAllowedPipelineIds;
