@@ -10,6 +10,7 @@ import { checkinRouter } from "./routes/checkin";
 import { staffRouter } from "./routes/staff";
 import { analyticsRouter } from "./routes/analytics";
 import { ghlRouter } from "./routes/ghl";
+import { profileRouter } from "./routes/profile";
 import { startOutboxWorker, stopOutboxWorker } from "./worker/outbox";
 import { pool } from "./db/pool";
 
@@ -60,6 +61,7 @@ app.get("/", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/checkin", checkinRouter);
+app.use("/api/profile", profileRouter);
 app.use("/api/staff", staffRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/ghl", ghlRouter);

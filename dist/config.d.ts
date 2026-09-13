@@ -24,6 +24,9 @@ export declare const env: {
     GHL_POINTS_FIELD_ID: string;
     GHL_CHECKIN_DATE_FIELD_KEY: string;
     GHL_CHECKIN_DATE_FIELD_ID: string;
+    GHL_VEHICLE_MAKE_FIELD_KEY: string;
+    GHL_VEHICLE_YEAR_FIELD_KEY: string;
+    GHL_VEHICLE_MODEL_FIELD_KEY: string;
     GHL_CHECKIN_OBJECT_KEY: string;
     GHL_CHECKIN_OBJECT_DATE_FIELD_KEY: string;
     GHL_CHECKIN_OBJECT_POINTS_FIELD_KEY: string;

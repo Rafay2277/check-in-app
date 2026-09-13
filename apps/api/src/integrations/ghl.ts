@@ -1,12 +1,32 @@
 import { env } from "../config";
 import { calendarDateInShopTz } from "../lib/dates";
 
+export type GhlCustomField = {
+  id?: string;
+  key?: string;
+  fieldKey?: string;
+  value?: unknown;
+  field_value?: unknown;
+};
+
 export type GhlContact = {
   id: string;
   firstName?: string;
   lastName?: string;
   name?: string;
   phone?: string;
+  email?: string;
+  customFields?: GhlCustomField[];
+};
+
+export type GhlMemberProfile = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  vehicleMake: string;
+  vehicleYear: string;
+  vehicleModel: string;
 };
 
 type GhlSearchResponse = {
@@ -306,6 +326,118 @@ async function getGhlContactById(
   if (!res.ok) return null;
   const data = (await res.json()) as { contact?: GhlContact };
   return data.contact?.id ? data.contact : null;
+}
+
+function customFieldValue(
+  fields: GhlCustomField[] | undefined,
+  wantedKey: string
+): string {
+  const key = normalizePointsFieldKey(wantedKey);
+  if (!key || !fields?.length) return "";
+  const match = fields.find((f) => {
+    const candidates = [f.key, f.fieldKey]
+      .filter(Boolean)
+      .map((k) => normalizePointsFieldKey(String(k)));
+    return candidates.includes(key);
+  });
+  if (!match) return "";
+  const raw = match.value ?? match.field_value;
+  if (raw == null) return "";
+  return String(raw).trim();
+}
+
+function contactToMemberProfile(contact: GhlContact): GhlMemberProfile {
+  return {
+    firstName: (contact.firstName || "").trim(),
+    lastName: (contact.lastName || "").trim(),
+    phone: (contact.phone || "").trim(),
+    email: (contact.email || "").trim(),
+    vehicleMake: customFieldValue(
+      contact.customFields,
+      env.GHL_VEHICLE_MAKE_FIELD_KEY
+    ),
+    vehicleYear: customFieldValue(
+      contact.customFields,
+      env.GHL_VEHICLE_YEAR_FIELD_KEY
+    ),
+    vehicleModel: customFieldValue(
+      contact.customFields,
+      env.GHL_VEHICLE_MODEL_FIELD_KEY
+    ),
+  };
+}
+
+export async function getGhlMemberProfile(
+  ghlContactId: string
+): Promise<GhlMemberProfile | null> {
+  if (env.MOCK_INTEGRATIONS) {
+    return {
+      firstName: "Mock",
+      lastName: "Member",
+      phone: "+15555550100",
+      email: "mock@example.com",
+      vehicleMake: "Porsche",
+      vehicleYear: "2020",
+      vehicleModel: "911",
+    };
+  }
+
+  const contact = await getGhlContactById(ghlContactId);
+  if (!contact) return null;
+  return contactToMemberProfile(contact);
+}
+
+export async function updateGhlMemberProfile(
+  ghlContactId: string,
+  profile: GhlMemberProfile
+): Promise<GhlMemberProfile> {
+  if (env.MOCK_INTEGRATIONS) {
+    console.log(`[MOCK GHL] update profile ${ghlContactId}`, profile);
+    return profile;
+  }
+
+  const customFields: Array<{ key: string; field_value: string }> = [
+    {
+      key: normalizePointsFieldKey(env.GHL_VEHICLE_MAKE_FIELD_KEY),
+      field_value: profile.vehicleMake,
+    },
+    {
+      key: normalizePointsFieldKey(env.GHL_VEHICLE_YEAR_FIELD_KEY),
+      field_value: profile.vehicleYear,
+    },
+    {
+      key: normalizePointsFieldKey(env.GHL_VEHICLE_MODEL_FIELD_KEY),
+      field_value: profile.vehicleModel,
+    },
+  ].filter((f) => f.key);
+
+  const body: Record<string, unknown> = {
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    email: profile.email || undefined,
+    phone: profile.phone || undefined,
+    customFields,
+  };
+
+  const res = await fetch(`${env.GHL_API_BASE_URL}/contacts/${ghlContactId}`, {
+    method: "PUT",
+    headers: ghlHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`GHL update profile failed (${res.status}): ${text}`);
+  }
+
+  const data = (await res.json()) as { contact?: GhlContact };
+  if (data.contact?.id) {
+    return contactToMemberProfile(data.contact);
+  }
+
+  // Some GHL responses omit custom fields on PUT — re-fetch for truth.
+  const refreshed = await getGhlMemberProfile(ghlContactId);
+  return refreshed ?? profile;
 }
 
 type GhlPipeline = {

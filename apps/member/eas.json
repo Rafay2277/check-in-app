@@ -13,6 +13,7 @@
     },
     "production": {
       "node": "22.14.0",
+      "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },
@@ -22,6 +23,10 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6807912021"
+      }
+    }
   }
 }

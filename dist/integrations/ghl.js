@@ -4,6 +4,8 @@ exports.normalizePointsFieldKey = normalizePointsFieldKey;
 exports.normalizeCustomObjectFieldKey = normalizeCustomObjectFieldKey;
 exports.createGhlCheckinHistoryRecord = createGhlCheckinHistoryRecord;
 exports.findGhlContactByPhone = findGhlContactByPhone;
+exports.getGhlMemberProfile = getGhlMemberProfile;
+exports.updateGhlMemberProfile = updateGhlMemberProfile;
 exports.contactInAllowedPipelines = contactInAllowedPipelines;
 exports.searchGhlContacts = searchGhlContacts;
 exports.getGhlPointsTotal = getGhlPointsTotal;
@@ -225,6 +227,94 @@ async function getGhlContactById(ghlContactId) {
         return null;
     const data = (await res.json());
     return data.contact?.id ? data.contact : null;
+}
+function customFieldValue(fields, wantedKey) {
+    const key = normalizePointsFieldKey(wantedKey);
+    if (!key || !fields?.length)
+        return "";
+    const match = fields.find((f) => {
+        const candidates = [f.key, f.fieldKey]
+            .filter(Boolean)
+            .map((k) => normalizePointsFieldKey(String(k)));
+        return candidates.includes(key);
+    });
+    if (!match)
+        return "";
+    const raw = match.value ?? match.field_value;
+    if (raw == null)
+        return "";
+    return String(raw).trim();
+}
+function contactToMemberProfile(contact) {
+    return {
+        firstName: (contact.firstName || "").trim(),
+        lastName: (contact.lastName || "").trim(),
+        phone: (contact.phone || "").trim(),
+        email: (contact.email || "").trim(),
+        vehicleMake: customFieldValue(contact.customFields, config_1.env.GHL_VEHICLE_MAKE_FIELD_KEY),
+        vehicleYear: customFieldValue(contact.customFields, config_1.env.GHL_VEHICLE_YEAR_FIELD_KEY),
+        vehicleModel: customFieldValue(contact.customFields, config_1.env.GHL_VEHICLE_MODEL_FIELD_KEY),
+    };
+}
+async function getGhlMemberProfile(ghlContactId) {
+    if (config_1.env.MOCK_INTEGRATIONS) {
+        return {
+            firstName: "Mock",
+            lastName: "Member",
+            phone: "+15555550100",
+            email: "mock@example.com",
+            vehicleMake: "Porsche",
+            vehicleYear: "2020",
+            vehicleModel: "911",
+        };
+    }
+    const contact = await getGhlContactById(ghlContactId);
+    if (!contact)
+        return null;
+    return contactToMemberProfile(contact);
+}
+async function updateGhlMemberProfile(ghlContactId, profile) {
+    if (config_1.env.MOCK_INTEGRATIONS) {
+        console.log(`[MOCK GHL] update profile ${ghlContactId}`, profile);
+        return profile;
+    }
+    const customFields = [
+        {
+            key: normalizePointsFieldKey(config_1.env.GHL_VEHICLE_MAKE_FIELD_KEY),
+            field_value: profile.vehicleMake,
+        },
+        {
+            key: normalizePointsFieldKey(config_1.env.GHL_VEHICLE_YEAR_FIELD_KEY),
+            field_value: profile.vehicleYear,
+        },
+        {
+            key: normalizePointsFieldKey(config_1.env.GHL_VEHICLE_MODEL_FIELD_KEY),
+            field_value: profile.vehicleModel,
+        },
+    ].filter((f) => f.key);
+    const body = {
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        email: profile.email || undefined,
+        phone: profile.phone || undefined,
+        customFields,
+    };
+    const res = await fetch(`${config_1.env.GHL_API_BASE_URL}/contacts/${ghlContactId}`, {
+        method: "PUT",
+        headers: ghlHeaders(),
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`GHL update profile failed (${res.status}): ${text}`);
+    }
+    const data = (await res.json());
+    if (data.contact?.id) {
+        return contactToMemberProfile(data.contact);
+    }
+    // Some GHL responses omit custom fields on PUT — re-fetch for truth.
+    const refreshed = await getGhlMemberProfile(ghlContactId);
+    return refreshed ?? profile;
 }
 /** Cached allowed pipeline ids for this process (resolved by name). */
 let cachedAllowedPipelineIds;

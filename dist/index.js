@@ -15,6 +15,7 @@ const checkin_1 = require("./routes/checkin");
 const staff_1 = require("./routes/staff");
 const analytics_1 = require("./routes/analytics");
 const ghl_1 = require("./routes/ghl");
+const profile_1 = require("./routes/profile");
 const outbox_1 = require("./worker/outbox");
 const pool_1 = require("./db/pool");
 (0, config_1.assertLiveIntegrationsConfigured)();
@@ -58,6 +59,7 @@ app.get("/", (_req, res) => {
 });
 app.use("/api/auth", auth_1.authRouter);
 app.use("/api/checkin", checkin_1.checkinRouter);
+app.use("/api/profile", profile_1.profileRouter);
 app.use("/api/staff", staff_1.staffRouter);
 app.use("/api/analytics", analytics_1.analyticsRouter);
 app.use("/api/ghl", ghl_1.ghlRouter);

@@ -51,7 +51,7 @@ export default function HomeScreen() {
   return (
     <Screen contentStyle={styles.safe}>
       <View style={styles.body}>
-        <BrandMark size={150} />
+        <BrandMark size={105} />
         {loading ? (
           <ActivityIndicator
             color={colors.accentBright}
@@ -83,6 +83,12 @@ export default function HomeScreen() {
           }
           disabled={loading}
         />
+        <Pressable
+          style={styles.signOut}
+          onPress={() => router.push("/(app)/profile")}
+        >
+          <Text style={styles.signOutText}>Profile</Text>
+        </Pressable>
         <Pressable
           style={styles.signOut}
           onPress={() => router.push("/(app)/account")}

@@ -68,6 +68,10 @@ const envSchema = zod_1.z.object({
     GHL_POINTS_FIELD_ID: zod_1.z.string().optional().default(""),
     GHL_CHECKIN_DATE_FIELD_KEY: zod_1.z.string().optional().default("checkin_date"),
     GHL_CHECKIN_DATE_FIELD_ID: zod_1.z.string().optional().default(""),
+    /** Profile vehicle fields ({{contact.vehicle_*}}). */
+    GHL_VEHICLE_MAKE_FIELD_KEY: zod_1.z.string().optional().default("vehicle_make"),
+    GHL_VEHICLE_YEAR_FIELD_KEY: zod_1.z.string().optional().default("vehicle_year"),
+    GHL_VEHICLE_MODEL_FIELD_KEY: zod_1.z.string().optional().default("vehicle_model"),
     /** Custom Object schema key for per-visit history (empty = skip). */
     GHL_CHECKIN_OBJECT_KEY: zod_1.z.string().optional().default("custom_objects.check_ins"),
     /** Field keys on that object (from merge tags {{custom_objects.check_ins.*}}). */
