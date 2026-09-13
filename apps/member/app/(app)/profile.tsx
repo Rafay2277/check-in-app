@@ -17,7 +17,7 @@ import {
   type MemberProfile,
 } from "../../src/api";
 import { useAuth } from "../../src/auth";
-import { GhostButton, GoldButton } from "../../src/chrome";
+import { GhostButton, GoldButton, Hairline } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
 import { colors, fonts, radii } from "../../src/theme";
 
@@ -105,32 +105,34 @@ export default function ProfileScreen() {
         <ScrollView
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           <Text style={styles.title}>Profile</Text>
-          <Text style={styles.sub}>
-            Details sync from your fourtillfour membership. Changes save back to
-            your account.
-          </Text>
 
           {loading ? (
             <ActivityIndicator
               color={colors.accentBright}
-              style={{ marginTop: 28 }}
+              style={{ marginTop: 40 }}
             />
           ) : (
             <View style={styles.form}>
-              <Field
-                label="First name"
-                value={form.firstName}
-                onChangeText={(v) => setField("firstName", v)}
-                autoCapitalize="words"
-              />
-              <Field
-                label="Last name"
-                value={form.lastName}
-                onChangeText={(v) => setField("lastName", v)}
-                autoCapitalize="words"
-              />
+              <Text style={styles.section}>Contact</Text>
+              <View style={styles.row}>
+                <Field
+                  style={styles.half}
+                  label="First name"
+                  value={form.firstName}
+                  onChangeText={(v) => setField("firstName", v)}
+                  autoCapitalize="words"
+                />
+                <Field
+                  style={styles.half}
+                  label="Last name"
+                  value={form.lastName}
+                  onChangeText={(v) => setField("lastName", v)}
+                  autoCapitalize="words"
+                />
+              </View>
               <Field
                 label="Phone"
                 value={form.phone}
@@ -146,20 +148,28 @@ export default function ProfileScreen() {
                 autoCapitalize="none"
                 autoComplete="email"
               />
+
+              <Hairline />
+
+              <Text style={styles.section}>Vehicle</Text>
+              <View style={styles.row}>
+                <Field
+                  style={styles.year}
+                  label="Year"
+                  value={form.vehicleYear}
+                  onChangeText={(v) => setField("vehicleYear", v)}
+                  keyboardType="number-pad"
+                />
+                <Field
+                  style={styles.flexGrow}
+                  label="Make"
+                  value={form.vehicleMake}
+                  onChangeText={(v) => setField("vehicleMake", v)}
+                  autoCapitalize="words"
+                />
+              </View>
               <Field
-                label="Vehicle make"
-                value={form.vehicleMake}
-                onChangeText={(v) => setField("vehicleMake", v)}
-                autoCapitalize="words"
-              />
-              <Field
-                label="Vehicle year"
-                value={form.vehicleYear}
-                onChangeText={(v) => setField("vehicleYear", v)}
-                keyboardType="number-pad"
-              />
-              <Field
-                label="Vehicle model"
+                label="Model"
                 value={form.vehicleModel}
                 onChangeText={(v) => setField("vehicleModel", v)}
                 autoCapitalize="words"
@@ -194,6 +204,7 @@ function Field({
   keyboardType,
   autoCapitalize,
   autoComplete,
+  style,
 }: {
   label: string;
   value: string;
@@ -201,9 +212,10 @@ function Field({
   keyboardType?: "default" | "phone-pad" | "email-address" | "number-pad";
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
   autoComplete?: "tel" | "email" | "off";
+  style?: object;
 }) {
   return (
-    <View>
+    <View style={[styles.field, style]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         style={styles.input}
@@ -222,47 +234,66 @@ const styles = StyleSheet.create({
   safe: { paddingBottom: 18 },
   flex: { flex: 1 },
   scroll: {
-    paddingTop: 8,
-    paddingBottom: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
   },
   title: {
     color: colors.ink,
     fontFamily: fonts.sansSemi,
-    fontSize: 26,
-    textAlign: "center",
-  },
-  sub: {
-    color: colors.muted,
-    fontFamily: fonts.sans,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
+    fontSize: 24,
+    letterSpacing: 0.4,
     marginTop: 8,
-    marginBottom: 18,
+    marginBottom: 20,
   },
-  form: { gap: 4 },
+  form: {
+    gap: 14,
+  },
+  section: {
+    color: colors.muted,
+    fontFamily: fonts.sansBold,
+    fontSize: 10,
+    letterSpacing: 2.2,
+    textTransform: "uppercase",
+    marginBottom: -2,
+  },
+  row: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  half: {
+    flex: 1,
+  },
+  year: {
+    width: 88,
+  },
+  flexGrow: {
+    flex: 1,
+  },
+  field: {},
   label: {
     color: colors.accentBright,
     fontFamily: fonts.sansBold,
-    fontSize: 11,
-    letterSpacing: 1.8,
+    fontSize: 10,
+    letterSpacing: 1.6,
     textTransform: "uppercase",
-    marginBottom: 8,
-    marginTop: 12,
+    marginBottom: 7,
   },
   input: {
     backgroundColor: colors.input,
     borderRadius: radii.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     color: colors.ink,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    fontSize: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 15,
     fontFamily: fonts.sans,
   },
   error: {
     color: colors.bad,
-    marginTop: 14,
+    marginTop: 4,
     fontFamily: fonts.sansMedium,
+    fontSize: 13,
     textAlign: "center",
   },
   actions: { gap: 8 },
