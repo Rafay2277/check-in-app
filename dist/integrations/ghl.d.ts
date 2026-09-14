@@ -1,27 +1,9 @@
-export type GhlCustomField = {
-    id?: string;
-    key?: string;
-    fieldKey?: string;
-    value?: unknown;
-    field_value?: unknown;
-};
 export type GhlContact = {
     id: string;
     firstName?: string;
     lastName?: string;
     name?: string;
     phone?: string;
-    email?: string;
-    customFields?: GhlCustomField[];
-};
-export type GhlMemberProfile = {
-    firstName: string;
-    lastName: string;
-    phone: string;
-    email: string;
-    vehicleMake: string;
-    vehicleYear: string;
-    vehicleModel: string;
 };
 /** Normalize merge-tag style values like {{contact.checkin_points}} → checkin_points */
 export declare function normalizePointsFieldKey(raw: string): string;
@@ -40,8 +22,6 @@ export declare function normalizeCustomObjectFieldKey(raw: string): string;
  */
 export declare function createGhlCheckinHistoryRecord(ghlContactId: string, pointsTotal: number, checkinDate: string, existingRecordId?: string): Promise<string | null>;
 export declare function findGhlContactByPhone(phoneE164: string): Promise<GhlContact | null>;
-export declare function getGhlMemberProfile(ghlContactId: string): Promise<GhlMemberProfile | null>;
-export declare function updateGhlMemberProfile(ghlContactId: string, profile: GhlMemberProfile): Promise<GhlMemberProfile>;
 /**
  * True when the contact has an opportunity in Active Member or Car Community
  * (or whatever is configured in GHL_ALLOWED_PIPELINE_NAMES).

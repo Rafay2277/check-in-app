@@ -85,12 +85,6 @@ export default function HomeScreen() {
         />
         <Pressable
           style={styles.signOut}
-          onPress={() => router.push("/(app)/profile")}
-        >
-          <Text style={styles.signOutText}>Profile</Text>
-        </Pressable>
-        <Pressable
-          style={styles.signOut}
           onPress={() => router.push("/(app)/account")}
         >
           <Text style={styles.signOutText}>Account</Text>

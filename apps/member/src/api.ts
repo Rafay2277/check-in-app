@@ -204,40 +204,6 @@ export async function deleteAccount(): Promise<void> {
   await clearSession();
 }
 
-export type MemberProfile = {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  vehicleMake: string;
-  vehicleYear: string;
-  vehicleModel: string;
-};
-
-export async function fetchProfile(): Promise<MemberProfile> {
-  const res = await apiFetch("/api/profile", {}, true);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || "Failed to load profile");
-  }
-  return data as MemberProfile;
-}
-
-export async function updateProfile(
-  profile: MemberProfile
-): Promise<MemberProfile> {
-  const res = await apiFetch(
-    "/api/profile",
-    { method: "PUT", body: JSON.stringify(profile) },
-    true
-  );
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || "Could not save profile");
-  }
-  return data as MemberProfile;
-}
-
 export const LEGAL_URLS = {
   privacy: "https://dashboard.nouraiz.com/legal/privacy.html",
   terms: "https://dashboard.nouraiz.com/legal/terms.html",
