@@ -2,14 +2,13 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useAuth } from "../../src/auth";
 import { BrandMark } from "../../src/BrandMark";
-import { GoldButton, Hairline, QrGlyph } from "../../src/chrome";
+import { GhostButton, GoldButton, Hairline, QrGlyph } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
 import { colors, fonts } from "../../src/theme";
 
@@ -51,20 +50,20 @@ export default function HomeScreen() {
   return (
     <Screen contentStyle={styles.safe}>
       <View style={styles.body}>
-        <BrandMark size={105} />
+        <BrandMark size={88} />
         {loading ? (
           <ActivityIndicator
             color={colors.accentBright}
-            style={{ marginTop: 36 }}
+            style={{ marginTop: 28 }}
           />
         ) : (
           <View style={styles.meta}>
-            <Text style={styles.label}>Check-in points</Text>
-            <Text style={styles.points}>{member?.pointsTotal ?? 0}</Text>
-            <Hairline />
             <Text style={styles.since}>
               {first ? `Hi, ${first}` : "Member"}
             </Text>
+            <Hairline />
+            <Text style={styles.label}>Check-in points</Text>
+            <Text style={styles.points}>{member?.pointsTotal ?? 0}</Text>
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </View>
         )}
@@ -83,15 +82,12 @@ export default function HomeScreen() {
           }
           disabled={loading}
         />
-        <Pressable
-          style={styles.signOut}
+        <GhostButton
+          label="Account"
           onPress={() => router.push("/(app)/account")}
-        >
-          <Text style={styles.signOutText}>Account</Text>
-        </Pressable>
-        <Pressable style={styles.signOut} onPress={onSignOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
+          disabled={loading}
+        />
+        <GhostButton label="Sign out" onPress={onSignOut} disabled={loading} />
       </View>
     </Screen>
   );
@@ -106,27 +102,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingBottom: 24,
+    paddingBottom: 12,
   },
   meta: {
-    marginTop: 36,
+    marginTop: 88,
     alignItems: "center",
-    width: "72%",
-  },
-  label: {
-    color: colors.accentBright,
-    fontFamily: fonts.sansBold,
-    fontSize: 11,
-    letterSpacing: 2.2,
-    textTransform: "uppercase",
-  },
-  points: {
-    color: colors.ink,
-    fontFamily: fonts.sans,
-    fontSize: 72,
-    lineHeight: 80,
-    marginTop: 6,
-    letterSpacing: 1,
+    width: "78%",
   },
   since: {
     color: colors.muted,
@@ -135,22 +116,27 @@ const styles = StyleSheet.create({
     letterSpacing: 1.8,
     textTransform: "uppercase",
   },
+  label: {
+    color: colors.accentBright,
+    fontFamily: fonts.sansBold,
+    fontSize: 11,
+    letterSpacing: 2.2,
+    textTransform: "uppercase",
+    marginTop: 2,
+  },
+  points: {
+    color: colors.ink,
+    fontFamily: fonts.sans,
+    fontSize: 72,
+    lineHeight: 80,
+    marginTop: 4,
+    letterSpacing: 1,
+  },
   error: {
     color: colors.bad,
     marginTop: 10,
     fontFamily: fonts.sansMedium,
     textAlign: "center",
   },
-  actions: { gap: 8 },
-  signOut: {
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  signOutText: {
-    color: colors.muted,
-    fontFamily: fonts.sansMedium,
-    fontSize: 12,
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
-  },
+  actions: { gap: 10 },
 });
