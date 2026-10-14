@@ -8,13 +8,22 @@ import {
 } from "react-native";
 import { useAuth } from "../../src/auth";
 import { BrandMark } from "../../src/BrandMark";
-import { GhostButton, GoldButton, Hairline, QrGlyph } from "../../src/chrome";
+import {
+  GhostButton,
+  GoldButton,
+  Hairline,
+  QrGlyph,
+  tierMarkVariant,
+} from "../../src/chrome";
+import { membershipTheme } from "../../src/membershipTheme";
 import { Screen } from "../../src/Screen";
 import { colors, fonts } from "../../src/theme";
 
 export default function HomeScreen() {
   const router = useRouter();
   const { member, refreshProfile, signOut } = useAuth();
+  const tier = member?.membershipTier;
+  const theme = membershipTheme(tier);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!member);
 
@@ -48,9 +57,9 @@ export default function HomeScreen() {
   const first = member?.name?.split(" ")[0];
 
   return (
-    <Screen contentStyle={styles.safe}>
+    <Screen contentStyle={styles.safe} membershipTier={tier}>
       <View style={styles.body}>
-        <BrandMark size={88} />
+        <BrandMark variant={tierMarkVariant(tier, "hero")} size={88} />
         {loading ? (
           <ActivityIndicator
             color={colors.accentBright}
@@ -72,7 +81,7 @@ export default function HomeScreen() {
       <View style={styles.actions}>
         <GoldButton
           label={member?.checkedInToday ? "Checked in today" : "Check in"}
-          leading={<QrGlyph />}
+          leading={<QrGlyph color={theme.primaryButtonText} />}
           onPress={() =>
             router.push(
               member?.checkedInToday
@@ -81,13 +90,20 @@ export default function HomeScreen() {
             )
           }
           disabled={loading}
+          membershipTier={tier}
         />
         <GhostButton
           label="Account"
           onPress={() => router.push("/(app)/account")}
           disabled={loading}
+          membershipTier={tier}
         />
-        <GhostButton label="Sign out" onPress={onSignOut} disabled={loading} />
+        <GhostButton
+          label="Sign out"
+          onPress={onSignOut}
+          disabled={loading}
+          membershipTier={tier}
+        />
       </View>
     </Screen>
   );

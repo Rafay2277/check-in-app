@@ -12,13 +12,14 @@ import {
 import { deleteAccount, LEGAL_URLS } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { BrandMark } from "../../src/BrandMark";
-import { GhostButton } from "../../src/chrome";
+import { GhostButton, tierMarkVariant } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
 import { colors, fonts } from "../../src/theme";
 
 export default function AccountScreen() {
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { member, signOut } = useAuth();
+  const tier = member?.membershipTier;
   const [busy, setBusy] = useState(false);
 
   function confirmDelete() {
@@ -53,9 +54,9 @@ export default function AccountScreen() {
   }
 
   return (
-    <Screen contentStyle={styles.safe}>
+    <Screen contentStyle={styles.safe} membershipTier={tier}>
       <View style={styles.body}>
-        <BrandMark size={88} />
+        <BrandMark variant={tierMarkVariant(tier, "hero")} size={88} />
         <Text style={styles.title}>Account</Text>
         <Text style={styles.copy}>
           Manage your check-in app session, privacy links, and account deletion.
@@ -95,7 +96,12 @@ export default function AccountScreen() {
             <Text style={styles.deleteText}>Delete account</Text>
           </Pressable>
         )}
-        <GhostButton label="Back" onPress={() => router.back()} disabled={busy} />
+        <GhostButton
+          label="Back"
+          onPress={() => router.back()}
+          disabled={busy}
+          membershipTier={tier}
+        />
       </View>
     </Screen>
   );

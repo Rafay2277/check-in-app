@@ -4,11 +4,15 @@ import Constants from "expo-constants";
 const ACCESS_KEY = "checkin_access_token";
 const REFRESH_KEY = "checkin_refresh_token";
 
+export type MembershipTier = "premium" | "standard";
+
 export type Member = {
   id: string;
   name: string;
   phoneNumber: string;
   pointsTotal: number;
+  /** premium = Flying 4 / Active Member; standard = Circle 4 / Car Community */
+  membershipTier?: MembershipTier;
   checkedInToday?: boolean;
   checkinDate?: string;
 };
@@ -66,10 +70,16 @@ async function refreshAccessToken(): Promise<string | null> {
     return null;
   }
 
-  const data = (await res.json()) as {
-    accessToken: string;
-    refreshToken: string;
-  };
+  let data: { accessToken: string; refreshToken: string };
+  try {
+    data = (await readJson(res)) as {
+      accessToken: string;
+      refreshToken: string;
+    };
+  } catch {
+    await clearSession();
+    return null;
+  }
   // Rotating refresh: always persist the new pair
   await saveSession(data.accessToken, data.refreshToken);
   return data.accessToken;
@@ -107,12 +117,40 @@ export async function apiFetch(
   return fetch(`${apiBase()}${path}`, { ...init, headers });
 }
 
+/**
+ * Parse API JSON safely. Hostinger/CDN outages and Express HTML error pages
+ * start with `<`, which produces the confusing "Unexpected character: <" message.
+ */
+async function readJson<T = Record<string, unknown>>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const looksHtml = /^\s*</.test(text);
+    throw new Error(
+      looksHtml
+        ? "Server temporarily unavailable. Please try again in a moment."
+        : "Unexpected server response. Please try again."
+    );
+  }
+}
+
 export async function startAuth(name: string, phone: string) {
   const res = await apiFetch("/api/auth/start", {
     method: "POST",
     body: JSON.stringify({ name, phone }),
   });
-  const data = await res.json();
+  const data = await readJson<{
+    error?: string;
+    skippedOtp?: boolean;
+    accessToken?: string;
+    refreshToken?: string;
+    phone?: string;
+    member?: Member;
+    expiresInSeconds?: number;
+    resendAvailableInSeconds?: number;
+  }>(res);
   if (!res.ok) {
     throw new Error(data.error || "Could not start verification");
   }
@@ -139,19 +177,24 @@ export async function verifyAuth(phone: string, code: string) {
     method: "POST",
     body: JSON.stringify({ phone, code }),
   });
-  const data = await res.json();
+  const data = await readJson<{
+    error?: string;
+    accessToken: string;
+    refreshToken: string;
+    member: Member;
+  }>(res);
   if (!res.ok) {
     throw new Error(data.error || "Verification failed");
   }
   await saveSession(data.accessToken, data.refreshToken);
-  return data.member as Member;
+  return data.member;
 }
 
 export async function fetchMe(): Promise<Member> {
   const res = await apiFetch("/api/checkin/me", {}, true);
-  const data = await res.json();
+  const data = await readJson<Member & { error?: string }>(res);
   if (!res.ok) throw new Error(data.error || "Failed to load profile");
-  return data as Member;
+  return data;
 }
 
 export async function createCheckinToken(): Promise<CheckinToken> {
@@ -160,14 +203,16 @@ export async function createCheckinToken(): Promise<CheckinToken> {
     { method: "POST" },
     true
   );
-  const data = await res.json();
+  const data = await readJson<CheckinToken & { error?: string; code?: string }>(
+    res
+  );
   if (!res.ok) {
     throw new ApiError(
       data.error || "Could not create check-in",
-      data.code as string | undefined
+      data.code
     );
   }
-  return data as CheckinToken;
+  return data;
 }
 
 export type CheckinTokenStatus = {
@@ -186,27 +231,25 @@ export async function fetchCheckinTokenStatus(
     {},
     true
   );
-  const data = await res.json();
+  const data = await readJson<CheckinTokenStatus & { error?: string }>(res);
   if (!res.ok) {
     throw new Error(data.error || "Could not check status");
   }
-  return data as CheckinTokenStatus;
+  return data;
 }
 
 export async function deleteAccount(): Promise<void> {
   const res = await apiFetch("/api/auth/account", { method: "DELETE" }, true);
-  const data = await res.json().catch(() => ({}));
+  const data = await readJson<{ error?: string }>(res).catch(() => ({}));
   if (!res.ok) {
-    throw new Error(
-      (data as { error?: string }).error || "Could not delete account"
-    );
+    throw new Error(data.error || "Could not delete account");
   }
   await clearSession();
 }
 
 export const LEGAL_URLS = {
-  privacy: "https://dashboard.nouraiz.com/legal/privacy.html",
-  terms: "https://dashboard.nouraiz.com/legal/terms.html",
-  support: "https://dashboard.nouraiz.com/legal/support.html",
-  deleteAccount: "https://dashboard.nouraiz.com/legal/delete-account.html",
+  privacy: "https://fourtillfour.com/pages/app-privacy-policy",
+  terms: "https://fourtillfour.com/pages/app-terms-of-use",
+  support: "https://fourtillfour.com/pages/app-support",
+  deleteAccount: "https://fourtillfour.com/pages/app-delete-account",
 };

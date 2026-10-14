@@ -30,6 +30,7 @@ export declare const env: {
     GHL_CHECKIN_OBJECT_NAME_FIELD_KEY: string;
     GHL_CHECKIN_ASSOCIATION_ID: string;
     GHL_ALLOWED_PIPELINE_NAMES: string;
+    GHL_PREMIUM_PIPELINE_NAMES: string;
     OUTBOX_POLL_INTERVAL_MS: number;
     OUTBOX_MAX_ATTEMPTS: number;
     CHECKIN_CALENDAR_TZ: string;

@@ -5,6 +5,7 @@ import QRCode from "react-native-qrcode-svg";
 import { fetchCheckinTokenStatus } from "../../src/api";
 import { useAuth } from "../../src/auth";
 import { BrandMark } from "../../src/BrandMark";
+import { tierMarkVariant } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
 import { colors, fonts, radii } from "../../src/theme";
 
@@ -13,6 +14,7 @@ type Phase = "waiting" | "success" | "expired";
 export default function QrScreen() {
   const router = useRouter();
   const { member, setMember, refreshProfile } = useAuth();
+  const tier = member?.membershipTier;
   const params = useLocalSearchParams<{ payload: string; expiresAt: string }>();
   const rawPayload = Array.isArray(params.payload)
     ? params.payload[0]
@@ -92,9 +94,9 @@ export default function QrScreen() {
 
   if (phase === "success") {
     return (
-      <Screen contentStyle={styles.safe}>
+      <Screen contentStyle={styles.safe} membershipTier={tier}>
         <View style={styles.hero}>
-          <BrandMark size={92} />
+          <BrandMark variant={tierMarkVariant(tier, "hero")} size={92} />
         </View>
         <View style={styles.card}>
           <View style={styles.successBadge}>
@@ -119,13 +121,17 @@ export default function QrScreen() {
   const expired = phase === "expired";
 
   return (
-    <Screen contentStyle={styles.safe}>
+    <Screen contentStyle={styles.safe} membershipTier={tier}>
       <View style={styles.hero}>
-        <BrandMark size={92} />
+        <BrandMark variant={tierMarkVariant(tier, "hero")} size={92} />
       </View>
 
       <View style={styles.card}>
-        <BrandMark variant="gold" size={44} showWordmark={false} />
+        <BrandMark
+          variant={tierMarkVariant(tier, "sheet")}
+          size={44}
+          showWordmark={false}
+        />
         <View style={styles.check}>
           <Text style={styles.checkMark}>✓</Text>
         </View>

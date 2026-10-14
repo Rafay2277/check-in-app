@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fourtillfour",
     "slug": "checkin-member",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "checkin",
@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fourtillfour.checkin",
+      "buildNumber": "12",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -19,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#111111"
       },
-      "package": "com.fourtillfour.checkin"
+      "package": "com.fourtillfour.checkin",
+      "versionCode": 10
     },
     "plugins": [
       "expo-router",
@@ -39,9 +41,9 @@
     ],
     "extra": {
       "apiBaseUrl": "https://dashboard.nouraiz.com",
-      "privacyPolicyUrl": "https://dashboard.nouraiz.com/legal/privacy.html",
-      "termsOfUseUrl": "https://dashboard.nouraiz.com/legal/terms.html",
-      "supportUrl": "https://dashboard.nouraiz.com/legal/support.html",
+      "privacyPolicyUrl": "https://fourtillfour.com/pages/app-privacy-policy",
+      "termsOfUseUrl": "https://fourtillfour.com/pages/app-terms-of-use",
+      "supportUrl": "https://fourtillfour.com/pages/app-support",
       "router": {},
       "eas": {
         "projectId": "63932906-c9e5-41aa-b115-48e2067d66e4"

@@ -7,14 +7,29 @@ const auth_1 = require("../middleware/auth");
 const config_1 = require("../config");
 const dates_1 = require("../lib/dates");
 const dailyCheckin_1 = require("../lib/dailyCheckin");
+const ghl_1 = require("../integrations/ghl");
 exports.checkinRouter = (0, express_1.Router)();
 exports.checkinRouter.use(auth_1.requireMemberAuth);
 exports.checkinRouter.get("/me", async (req, res) => {
-    const { rows } = await (0, pool_1.query)(`SELECT id, name, phone_number, points_total FROM members WHERE id = $1`, [req.memberId]);
+    const { rows } = await (0, pool_1.query)(`SELECT id, name, phone_number, points_total, membership_tier, ghl_contact_id
+     FROM members WHERE id = $1`, [req.memberId]);
     const member = rows[0];
     if (!member) {
         res.status(404).json({ error: "Member not found" });
         return;
+    }
+    let membershipTier = member.membership_tier;
+    try {
+        const membership = await (0, ghl_1.resolveContactMembership)(member.ghl_contact_id);
+        if (membership.allowed && membership.tier && membership.tier !== membershipTier) {
+            membershipTier = membership.tier;
+            await (0, pool_1.query)(`UPDATE members
+         SET membership_tier = $2::membership_tier, updated_at = NOW()
+         WHERE id = $1`, [member.id, membershipTier]);
+        }
+    }
+    catch (err) {
+        console.warn("[checkin/me] membership refresh failed; using stored tier", err);
     }
     const checkedInToday = await (0, dailyCheckin_1.memberCheckedInToday)(member.id);
     res.json({
@@ -22,6 +37,7 @@ exports.checkinRouter.get("/me", async (req, res) => {
         name: member.name,
         phoneNumber: member.phone_number,
         pointsTotal: member.points_total,
+        membershipTier,
         checkedInToday,
         checkinDate: (0, dates_1.calendarDateInShopTz)(),
     });

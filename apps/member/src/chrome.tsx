@@ -6,6 +6,8 @@ import {
   Text,
   View,
 } from "react-native";
+import { MembershipTier } from "./api";
+import { membershipTheme } from "./membershipTheme";
 import { colors, fonts, radii } from "./theme";
 
 export function GoldButton({
@@ -14,25 +16,34 @@ export function GoldButton({
   disabled,
   loading,
   leading,
+  membershipTier,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
   leading?: ReactNode;
+  membershipTier?: MembershipTier | null;
 }) {
+  const theme = membershipTheme(membershipTier);
   return (
     <Pressable
-      style={[styles.gold, (disabled || loading) && styles.disabled]}
+      style={[
+        styles.gold,
+        { backgroundColor: theme.primaryButtonBg },
+        (disabled || loading) && styles.disabled,
+      ]}
       onPress={onPress}
       disabled={disabled || loading}
     >
       {loading ? (
-        <ActivityIndicator color={colors.ctaText} />
+        <ActivityIndicator color={theme.primaryButtonText} />
       ) : (
         <View style={styles.row}>
           {leading}
-          <Text style={styles.goldText}>{label}</Text>
+          <Text style={[styles.goldText, { color: theme.primaryButtonText }]}>
+            {label}
+          </Text>
         </View>
       )}
     </Pressable>
@@ -43,18 +54,25 @@ export function GhostButton({
   label,
   onPress,
   disabled,
+  membershipTier,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  membershipTier?: MembershipTier | null;
 }) {
+  const theme = membershipTheme(membershipTier);
   return (
     <Pressable
-      style={[styles.ghost, disabled && styles.disabled]}
+      style={[
+        styles.ghost,
+        { borderColor: theme.ghostBorder },
+        disabled && styles.disabled,
+      ]}
       onPress={onPress}
       disabled={disabled}
     >
-      <Text style={styles.ghostText}>{label}</Text>
+      <Text style={[styles.ghostText, { color: theme.ghostText }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -63,13 +81,14 @@ export function Hairline() {
   return <View style={styles.hair} />;
 }
 
-export function QrGlyph() {
+export function QrGlyph({ color }: { color?: string }) {
+  const fill = color ?? colors.ctaText;
   return (
     <View style={styles.qr}>
-      <View style={styles.qrDot} />
-      <View style={styles.qrDot} />
-      <View style={styles.qrDot} />
-      <View style={[styles.qrDot, { opacity: 0.45 }]} />
+      <View style={[styles.qrDot, { backgroundColor: fill }]} />
+      <View style={[styles.qrDot, { backgroundColor: fill }]} />
+      <View style={[styles.qrDot, { backgroundColor: fill }]} />
+      <View style={[styles.qrDot, { backgroundColor: fill, opacity: 0.45 }]} />
     </View>
   );
 }
@@ -128,3 +147,21 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
 });
+
+function markVariant(
+  sheetOrHero: "mark" | "sheetMark",
+  tier: MembershipTier | null | undefined
+): "white" | "gold" | "circle" {
+  const theme = membershipTheme(tier);
+  const kind = theme[sheetOrHero];
+  if (kind === "circle") return "circle";
+  if (kind === "wing-gold") return "gold";
+  return "white";
+}
+
+export function tierMarkVariant(
+  tier: MembershipTier | null | undefined,
+  which: "hero" | "sheet" = "hero"
+): "white" | "gold" | "circle" {
+  return markVariant(which === "sheet" ? "sheetMark" : "mark", tier);
+}

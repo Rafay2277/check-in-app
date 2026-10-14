@@ -296,9 +296,18 @@
         const pts = result.data.member?.pointsTotal;
         const kind =
           result.data.tokenKind === "permanent" ? "card" : "app QR";
+        const tierLabel =
+          result.data.member?.membershipLabel ||
+          (result.data.member?.membershipTier === "premium"
+            ? "Premium customer"
+            : result.data.member?.membershipTier === "standard"
+              ? "Standard customer"
+              : null);
+        const tierBit = tierLabel ? `${tierLabel} · ` : "";
         showResult(
           true,
-          `${name} · ${pts} pts (${kind}) — apply Loyalty Comp on Square`
+          `${name} · ${tierBit}${pts} pts (${kind}) — apply Loyalty Comp on Square`,
+          tierLabel ? `Approved — ${tierLabel}` : "Approved"
         );
       } else {
         const code = result.data.code;

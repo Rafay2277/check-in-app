@@ -88,6 +88,14 @@ const envSchema = zod_1.z.object({
         .string()
         .optional()
         .default("Active Member,Car Community"),
+    /**
+     * Pipelines that map to premium / Flying 4 theming.
+     * If a contact is also in a non-premium allowed pipeline, premium wins.
+     */
+    GHL_PREMIUM_PIPELINE_NAMES: zod_1.z
+        .string()
+        .optional()
+        .default("Active Member"),
     OUTBOX_POLL_INTERVAL_MS: zod_1.z.coerce.number().default(3000),
     OUTBOX_MAX_ATTEMPTS: zod_1.z.coerce.number().default(8),
     /** Calendar day for permanent-card daily limit (IANA tz). */

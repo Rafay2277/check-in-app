@@ -2,6 +2,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { ReactNode } from "react";
 import { StyleSheet, View, ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MembershipTier } from "./api";
+import { membershipTheme } from "./membershipTheme";
 import { colors } from "./theme";
 
 type Props = {
@@ -9,6 +11,8 @@ type Props = {
   edges?: ("top" | "bottom" | "left" | "right")[];
   style?: ViewStyle;
   contentStyle?: ViewStyle;
+  /** When set, screen background follows membership tier. */
+  membershipTier?: MembershipTier | null;
 };
 
 export function Screen({
@@ -16,11 +20,13 @@ export function Screen({
   edges = ["top", "bottom"],
   style,
   contentStyle,
+  membershipTier,
 }: Props) {
+  const theme = membershipTheme(membershipTier);
   return (
     <View style={[styles.root, style]}>
       <LinearGradient
-        colors={["#161616", colors.bg0, "#0c0c0c"]}
+        colors={theme.screenGradient}
         locations={[0, 0.45, 1]}
         style={StyleSheet.absoluteFill}
       />

@@ -4,6 +4,10 @@ import { AuthedRequest, requireMemberAuth } from "../middleware/auth";
 import { env } from "../config";
 import { calendarDateInShopTz } from "../lib/dates";
 import { memberCheckedInToday } from "../lib/dailyCheckin";
+import {
+  resolveContactMembership,
+  type MembershipTier,
+} from "../integrations/ghl";
 
 export const checkinRouter = Router();
 
@@ -15,8 +19,11 @@ checkinRouter.get("/me", async (req: AuthedRequest, res) => {
     name: string;
     phone_number: string;
     points_total: number;
+    membership_tier: MembershipTier;
+    ghl_contact_id: string;
   }>(
-    `SELECT id, name, phone_number, points_total FROM members WHERE id = $1`,
+    `SELECT id, name, phone_number, points_total, membership_tier, ghl_contact_id
+     FROM members WHERE id = $1`,
     [req.memberId]
   );
 
@@ -26,6 +33,22 @@ checkinRouter.get("/me", async (req: AuthedRequest, res) => {
     return;
   }
 
+  let membershipTier = member.membership_tier;
+  try {
+    const membership = await resolveContactMembership(member.ghl_contact_id);
+    if (membership.allowed && membership.tier && membership.tier !== membershipTier) {
+      membershipTier = membership.tier;
+      await query(
+        `UPDATE members
+         SET membership_tier = $2::membership_tier, updated_at = NOW()
+         WHERE id = $1`,
+        [member.id, membershipTier]
+      );
+    }
+  } catch (err) {
+    console.warn("[checkin/me] membership refresh failed; using stored tier", err);
+  }
+
   const checkedInToday = await memberCheckedInToday(member.id);
 
   res.json({
@@ -33,6 +56,7 @@ checkinRouter.get("/me", async (req: AuthedRequest, res) => {
     name: member.name,
     phoneNumber: member.phone_number,
     pointsTotal: member.points_total,
+    membershipTier,
     checkedInToday,
     checkinDate: calendarDateInShopTz(),
   });

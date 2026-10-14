@@ -2,13 +2,16 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { ApiError, createCheckinToken } from "../../src/api";
+import { useAuth } from "../../src/auth";
 import { BrandMark } from "../../src/BrandMark";
-import { GhostButton, GoldButton } from "../../src/chrome";
+import { GhostButton, GoldButton, tierMarkVariant } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
 import { colors, fonts, radii } from "../../src/theme";
 
 export default function ConfirmScreen() {
   const router = useRouter();
+  const { member } = useAuth();
+  const tier = member?.membershipTier;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,14 +38,18 @@ export default function ConfirmScreen() {
   }
 
   return (
-    <Screen contentStyle={styles.safe}>
+    <Screen contentStyle={styles.safe} membershipTier={tier}>
       <View style={styles.hero}>
-        <BrandMark size={150} />
+        <BrandMark variant={tierMarkVariant(tier, "hero")} size={150} />
       </View>
 
       <View style={styles.sheet}>
         <View style={styles.handle} />
-        <BrandMark variant="gold" size={52} showWordmark={false} />
+        <BrandMark
+          variant={tierMarkVariant(tier, "sheet")}
+          size={52}
+          showWordmark={false}
+        />
         <Text style={styles.title}>Did you bring your car today?</Text>
         <Text style={styles.copy}>
           Members enjoy one complimentary coffee per visit when they bring their
@@ -54,11 +61,13 @@ export default function ConfirmScreen() {
             label="Yes, I brought my car"
             onPress={onConfirm}
             loading={busy}
+            membershipTier={tier}
           />
           <GhostButton
             label="No, just here for coffee"
             onPress={() => router.back()}
             disabled={busy}
+            membershipTier={tier}
           />
         </View>
       </View>

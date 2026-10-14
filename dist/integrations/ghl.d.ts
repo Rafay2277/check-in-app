@@ -22,11 +22,20 @@ export declare function normalizeCustomObjectFieldKey(raw: string): string;
  */
 export declare function createGhlCheckinHistoryRecord(ghlContactId: string, pointsTotal: number, checkinDate: string, existingRecordId?: string): Promise<string | null>;
 export declare function findGhlContactByPhone(phoneE164: string): Promise<GhlContact | null>;
+/** Flying 4 (paid Active Member) vs Circle 4 (Car Community). */
+export type MembershipTier = "premium" | "standard";
+export type ContactMembership = {
+    allowed: boolean;
+    tier: MembershipTier | null;
+};
 /**
- * True when the contact has an opportunity in Active Member or Car Community
- * (or whatever is configured in GHL_ALLOWED_PIPELINE_NAMES).
+ * Resolve login eligibility + membership tier from GHL opportunity pipelines.
+ * Active Member (premium) wins if the contact is also in Car Community.
  */
+export declare function resolveContactMembership(ghlContactId: string): Promise<ContactMembership>;
+/** True when the contact is in Active Member or Car Community (or configured allowlist). */
 export declare function contactInAllowedPipelines(ghlContactId: string): Promise<boolean>;
+export declare function membershipLabel(tier: MembershipTier): string;
 /**
  * Free-text contact search (name or phone) against GHL directory.
  * Read-only; used by staff scanner lookup.

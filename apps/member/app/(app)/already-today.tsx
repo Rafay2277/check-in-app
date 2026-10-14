@@ -1,16 +1,20 @@
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useAuth } from "../../src/auth";
 import { BrandMark } from "../../src/BrandMark";
+import { tierMarkVariant } from "../../src/chrome";
 import { Screen } from "../../src/Screen";
 import { colors, fonts, radii } from "../../src/theme";
 
 export default function AlreadyTodayScreen() {
   const router = useRouter();
+  const { member } = useAuth();
+  const tier = member?.membershipTier;
 
   return (
-    <Screen contentStyle={styles.safe}>
+    <Screen contentStyle={styles.safe} membershipTier={tier}>
       <View style={styles.hero}>
-        <BrandMark size={92} />
+        <BrandMark variant={tierMarkVariant(tier, "hero")} size={92} />
       </View>
       <View style={styles.card}>
         <View style={styles.badge}>

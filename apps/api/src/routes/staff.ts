@@ -5,7 +5,12 @@ import { env } from "../config";
 import { query, withTransaction } from "../db/pool";
 import { signStaffToken } from "../lib/tokens";
 import { AuthedRequest, requireStaffAuth } from "../middleware/auth";
-import { getGhlPointsTotal } from "../integrations/ghl";
+import {
+  getGhlPointsTotal,
+  membershipLabel,
+  resolveContactMembership,
+  type MembershipTier,
+} from "../integrations/ghl";
 import { calendarDateInShopTz } from "../lib/dates";
 import { drainOutboxOnce } from "../worker/outbox";
 import {
@@ -33,7 +38,13 @@ const deactivateSchema = z.object({
 type ValidateOk = {
   approved: true;
   tokenKind: "rotating" | "permanent";
-  member: { id: string; name: string; pointsTotal: number };
+  member: {
+    id: string;
+    name: string;
+    pointsTotal: number;
+    membershipTier: MembershipTier;
+    membershipLabel: string;
+  };
 };
 
 type ValidateFail = {
@@ -68,7 +79,13 @@ async function awardPointAndOutbox(
   extraPayload: Record<string, unknown>,
   /** When set, raise local points to at least this GHL total before +1. */
   ghlPointsFloor: number | null = null
-): Promise<{ id: string; name: string; pointsTotal: number; ghlContactId: string }> {
+): Promise<{
+  id: string;
+  name: string;
+  pointsTotal: number;
+  ghlContactId: string;
+  membershipTier: MembershipTier;
+}> {
   if (ghlPointsFloor != null && ghlPointsFloor >= 0) {
     await client.query(
       `UPDATE members
@@ -84,12 +101,13 @@ async function awardPointAndOutbox(
     name: string;
     points_total: number;
     ghl_contact_id: string;
+    membership_tier: MembershipTier;
   }>(
     `UPDATE members
      SET points_total = points_total + 1,
          updated_at = NOW()
      WHERE id = $1
-     RETURNING id, name, points_total, ghl_contact_id`,
+     RETURNING id, name, points_total, ghl_contact_id, membership_tier`,
     [memberId]
   );
 
@@ -107,6 +125,7 @@ async function awardPointAndOutbox(
         memberId: member.id,
         ghlContactId: member.ghl_contact_id,
         pointsTotal: member.points_total,
+        membershipTier: member.membership_tier,
         ...extraPayload,
       }),
       dedupeKey,
@@ -118,6 +137,7 @@ async function awardPointAndOutbox(
     name: member.name,
     pointsTotal: member.points_total,
     ghlContactId: member.ghl_contact_id,
+    membershipTier: member.membership_tier,
   };
 }
 
@@ -204,6 +224,8 @@ async function tryValidateRotating(
       id: member.id,
       name: member.name,
       pointsTotal: member.pointsTotal,
+      membershipTier: member.membershipTier,
+      membershipLabel: membershipLabel(member.membershipTier),
     },
   };
 }
@@ -288,6 +310,8 @@ async function tryValidatePermanent(
         id: member.id,
         name: member.name,
         pointsTotal: member.pointsTotal,
+        membershipTier: member.membershipTier,
+        membershipLabel: membershipLabel(member.membershipTier),
       },
     };
   } catch (err) {
@@ -302,14 +326,20 @@ async function tryValidatePermanent(
   }
 }
 
-async function previewGhlPointsFloor(token: string): Promise<number | null> {
-  const { rows } = await query<{ ghl_contact_id: string }>(
-    `SELECT m.ghl_contact_id
+async function previewMemberForToken(token: string): Promise<{
+  memberId: string;
+  ghlContactId: string;
+} | null> {
+  const { rows } = await query<{
+    member_id: string;
+    ghl_contact_id: string;
+  }>(
+    `SELECT m.id AS member_id, m.ghl_contact_id
      FROM permanent_checkin_tokens p
      INNER JOIN members m ON m.id = p.member_id
      WHERE p.token = $1::uuid
      UNION ALL
-     SELECT m.ghl_contact_id
+     SELECT m.id AS member_id, m.ghl_contact_id
      FROM checkin_tokens c
      INNER JOIN members m ON m.id = c.member_id
      WHERE c.token = $1::uuid
@@ -318,8 +348,28 @@ async function previewGhlPointsFloor(token: string): Promise<number | null> {
      LIMIT 1`,
     [token]
   );
-  if (!rows[0]?.ghl_contact_id) return null;
-  return readGhlPointsFloor(rows[0].ghl_contact_id);
+  const row = rows[0];
+  if (!row?.ghl_contact_id) return null;
+  return { memberId: row.member_id, ghlContactId: row.ghl_contact_id };
+}
+
+/** Refresh stored tier from GHL so scanner shows current membership. */
+async function refreshMembershipTierForScan(
+  memberId: string,
+  ghlContactId: string
+): Promise<void> {
+  try {
+    const membership = await resolveContactMembership(ghlContactId);
+    if (!membership.allowed || !membership.tier) return;
+    await query(
+      `UPDATE members
+       SET membership_tier = $2::membership_tier, updated_at = NOW()
+       WHERE id = $1 AND membership_tier IS DISTINCT FROM $2::membership_tier`,
+      [memberId, membership.tier]
+    );
+  } catch (err) {
+    console.warn("[validate] membership refresh failed; using stored tier", err);
+  }
 }
 
 staffRouter.post("/session", (req, res) => {
@@ -360,7 +410,16 @@ staffRouter.post(
     }
 
     try {
-      const ghlPointsFloor = await previewGhlPointsFloor(parsed.data.token);
+      const preview = await previewMemberForToken(parsed.data.token);
+      const ghlPointsFloor = preview
+        ? await readGhlPointsFloor(preview.ghlContactId)
+        : null;
+      if (preview) {
+        await refreshMembershipTierForScan(
+          preview.memberId,
+          preview.ghlContactId
+        );
+      }
 
       const result = await withTransaction(async (client) => {
         const rotating = await tryValidateRotating(

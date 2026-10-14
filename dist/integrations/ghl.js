@@ -4,7 +4,9 @@ exports.normalizePointsFieldKey = normalizePointsFieldKey;
 exports.normalizeCustomObjectFieldKey = normalizeCustomObjectFieldKey;
 exports.createGhlCheckinHistoryRecord = createGhlCheckinHistoryRecord;
 exports.findGhlContactByPhone = findGhlContactByPhone;
+exports.resolveContactMembership = resolveContactMembership;
 exports.contactInAllowedPipelines = contactInAllowedPipelines;
+exports.membershipLabel = membershipLabel;
 exports.searchGhlContacts = searchGhlContacts;
 exports.getGhlPointsTotal = getGhlPointsTotal;
 exports.updateGhlCheckinProfile = updateGhlCheckinProfile;
@@ -196,9 +198,16 @@ async function findGhlContactByPhone(phoneE164) {
     });
     let contact = null;
     if (dupRes.ok) {
-        const data = (await dupRes.json());
-        if (data.contact?.id)
-            contact = data.contact;
+        const text = await dupRes.text();
+        try {
+            const data = (text ? JSON.parse(text) : {});
+            if (data.contact?.id)
+                contact = data.contact;
+        }
+        catch {
+            console.warn(`[ghl] duplicate search returned non-JSON for ${phoneE164}: ${text.slice(0, 180)}`);
+            contact = await searchGhlContactsByPhone(phoneE164);
+        }
     }
     else if (dupRes.status === 404) {
         return null;
@@ -223,25 +232,40 @@ async function getGhlContactById(ghlContactId) {
     });
     if (!res.ok)
         return null;
-    const data = (await res.json());
-    return data.contact?.id ? data.contact : null;
+    const text = await res.text();
+    try {
+        const data = (text ? JSON.parse(text) : {});
+        return data.contact?.id ? data.contact : null;
+    }
+    catch {
+        console.warn(`[ghl] get contact returned non-JSON for ${ghlContactId}: ${text.slice(0, 180)}`);
+        return null;
+    }
 }
 /** Cached allowed pipeline ids for this process (resolved by name). */
-let cachedAllowedPipelineIds;
+let cachedResolvedPipelines;
 let cachedAllowedPipelineWarn = false;
-function allowedPipelineNames() {
-    return config_1.env.GHL_ALLOWED_PIPELINE_NAMES.split(",")
+function splitPipelineNames(raw) {
+    return raw
+        .split(",")
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean);
 }
-async function resolveAllowedPipelineIds() {
-    if (cachedAllowedPipelineIds !== undefined) {
-        return cachedAllowedPipelineIds;
+function allowedPipelineNames() {
+    return splitPipelineNames(config_1.env.GHL_ALLOWED_PIPELINE_NAMES);
+}
+function premiumPipelineNames() {
+    return splitPipelineNames(config_1.env.GHL_PREMIUM_PIPELINE_NAMES);
+}
+async function resolveAllowedPipelines() {
+    if (cachedResolvedPipelines !== undefined) {
+        return cachedResolvedPipelines;
     }
     const wanted = new Set(allowedPipelineNames());
+    const premiumWanted = new Set(premiumPipelineNames());
     if (wanted.size === 0) {
-        cachedAllowedPipelineIds = [];
-        return cachedAllowedPipelineIds;
+        cachedResolvedPipelines = { premiumIds: [], standardIds: [], allIds: [] };
+        return cachedResolvedPipelines;
     }
     const url = new URL(`${config_1.env.GHL_API_BASE_URL}/opportunities/pipelines`);
     url.searchParams.set("locationId", config_1.env.GHL_LOCATION_ID);
@@ -254,16 +278,29 @@ async function resolveAllowedPipelineIds() {
         throw new Error(`GHL list pipelines failed (${res.status}): ${text}`);
     }
     const data = (await res.json());
-    const matched = (data.pipelines ?? [])
-        .filter((p) => p.id && p.name && wanted.has(p.name.trim().toLowerCase()))
-        .map((p) => p.id);
-    if (matched.length === 0 && !cachedAllowedPipelineWarn) {
+    const premiumIds = [];
+    const standardIds = [];
+    for (const p of data.pipelines ?? []) {
+        if (!p.id || !p.name)
+            continue;
+        const name = p.name.trim().toLowerCase();
+        if (!wanted.has(name))
+            continue;
+        if (premiumWanted.has(name)) {
+            premiumIds.push(p.id);
+        }
+        else {
+            standardIds.push(p.id);
+        }
+    }
+    const allIds = [...premiumIds, ...standardIds];
+    if (allIds.length === 0 && !cachedAllowedPipelineWarn) {
         cachedAllowedPipelineWarn = true;
         console.warn(`[ghl] no pipelines matched allowed names [${[...wanted].join(", ")}]. ` +
             `Check GHL_ALLOWED_PIPELINE_NAMES and Private Integration scope opportunities.readonly.`);
     }
-    cachedAllowedPipelineIds = matched;
-    return cachedAllowedPipelineIds;
+    cachedResolvedPipelines = { premiumIds, standardIds, allIds };
+    return cachedResolvedPipelines;
 }
 async function contactHasOpportunityInPipeline(ghlContactId, pipelineId) {
     // Marketplace docs use camelCase; some clients send snake_case — try camel first.
@@ -306,24 +343,36 @@ async function contactHasOpportunityInPipeline(ghlContactId, pipelineId) {
     throw new Error(`GHL opportunity search failed: ${lastError}`);
 }
 /**
- * True when the contact has an opportunity in Active Member or Car Community
- * (or whatever is configured in GHL_ALLOWED_PIPELINE_NAMES).
+ * Resolve login eligibility + membership tier from GHL opportunity pipelines.
+ * Active Member (premium) wins if the contact is also in Car Community.
  */
-async function contactInAllowedPipelines(ghlContactId) {
+async function resolveContactMembership(ghlContactId) {
     if (config_1.env.MOCK_INTEGRATIONS) {
-        console.log(`[MOCK GHL] pipeline membership check for contact ${ghlContactId} → allow`);
-        return true;
+        console.log(`[MOCK GHL] pipeline membership check for contact ${ghlContactId} → premium`);
+        return { allowed: true, tier: "premium" };
     }
-    const pipelineIds = await resolveAllowedPipelineIds();
-    if (pipelineIds.length === 0) {
-        return false;
+    const { premiumIds, standardIds, allIds } = await resolveAllowedPipelines();
+    if (allIds.length === 0) {
+        return { allowed: false, tier: null };
     }
-    for (const pipelineId of pipelineIds) {
+    for (const pipelineId of premiumIds) {
         if (await contactHasOpportunityInPipeline(ghlContactId, pipelineId)) {
-            return true;
+            return { allowed: true, tier: "premium" };
         }
     }
-    return false;
+    for (const pipelineId of standardIds) {
+        if (await contactHasOpportunityInPipeline(ghlContactId, pipelineId)) {
+            return { allowed: true, tier: "standard" };
+        }
+    }
+    return { allowed: false, tier: null };
+}
+/** True when the contact is in Active Member or Car Community (or configured allowlist). */
+async function contactInAllowedPipelines(ghlContactId) {
+    return (await resolveContactMembership(ghlContactId)).allowed;
+}
+function membershipLabel(tier) {
+    return tier === "premium" ? "Premium customer" : "Standard customer";
 }
 async function searchGhlContactsByPhone(phoneE164) {
     const contacts = await searchGhlContacts(phoneE164, 1);
@@ -361,7 +410,14 @@ async function searchGhlContacts(q, limit = 10) {
         const text = await res.text();
         throw new Error(`GHL contact search failed (${res.status}): ${text}`);
     }
-    const data = (await res.json());
+    const text = await res.text();
+    let data;
+    try {
+        data = (text ? JSON.parse(text) : {});
+    }
+    catch {
+        throw new Error(`GHL contact search returned non-JSON (${res.status}): ${text.slice(0, 180)}`);
+    }
     return data.contacts ?? [];
 }
 async function getGhlPointsTotal(ghlContactId) {

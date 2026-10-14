@@ -14,8 +14,9 @@ import {
 } from "../lib/tokens";
 import { env } from "../config";
 import {
-  contactInAllowedPipelines,
   findGhlContactByPhone,
+  resolveContactMembership,
+  type MembershipTier,
 } from "../integrations/ghl";
 import {
   contactFullName,
@@ -45,157 +46,181 @@ const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
 authRouter.post("/start", async (req, res) => {
-  const parsed = startSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid name or phone" });
-    return;
-  }
-
-  const phone = normalizePhone(parsed.data.phone);
-  if (!phone) {
-    res.status(400).json({ error: "Invalid phone number" });
-    return;
-  }
-
-  const contact = await findGhlContactByPhone(phone);
-  if (!contact) {
-    res.status(404).json({
-      error: "We couldn't find your account. Please check with staff",
-      code: "CONTACT_NOT_FOUND",
-    });
-    return;
-  }
-
-  if (!loginNameMatchesContact(parsed.data.name, contact)) {
-    res.status(403).json({
-      error:
-        "Name and phone don't match the same account. Please check both and try again",
-      code: "NAME_PHONE_MISMATCH",
-    });
-    return;
-  }
-
-  // Prefer GHL canonical name so the app never shows a mismatched typed name.
-  const canonicalName =
-    contactFullName(contact).trim() || parsed.data.name.trim();
-
-  let inPipeline = false;
   try {
-    inPipeline = await contactInAllowedPipelines(contact.id);
-  } catch (err) {
-    console.error("auth/start pipeline check failed", err);
-    res.status(502).json({
-      error: "Could not verify membership — please try again",
-      code: "PIPELINE_CHECK_FAILED",
-    });
-    return;
-  }
-  if (!inPipeline) {
-    res.status(403).json({
-      error: "Not Available",
-      code: "NOT_AVAILABLE",
-    });
-    return;
-  }
+    const parsed = startSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid name or phone" });
+      return;
+    }
 
-  // V1 demo path: no Twilio — GHL match + allowed pipeline is enough to issue a session
-  if (env.SKIP_SMS_OTP) {
+    const phone = normalizePhone(parsed.data.phone);
+    if (!phone) {
+      res.status(400).json({ error: "Invalid phone number" });
+      return;
+    }
+
+    let contact;
     try {
-      const session = await withTransaction(async (client) => {
-        const member = await upsertMember(client, {
-          name: canonicalName,
-          phone,
-          ghlContactId: contact.id,
-        });
-        const tokens = await issueSession(client, member.id);
-        return { member, ...tokens };
-      });
-
-      res.json({
-        ok: true,
-        skippedOtp: true,
-        phone,
-        accessToken: session.accessToken,
-        refreshToken: session.refreshToken,
-        expiresIn: session.expiresIn,
-        member: {
-          id: session.member.id,
-          name: session.member.name,
-          phoneNumber: session.member.phone_number,
-          pointsTotal: session.member.points_total,
-        },
-      });
+      contact = await findGhlContactByPhone(phone);
     } catch (err) {
-      console.error("auth/start (skip OTP) failed", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      const dbAuth =
-        /password authentication failed/i.test(msg) ||
-        /ECIRCUITBREAKER/i.test(msg) ||
-        /too many authentication failures/i.test(msg);
+      console.error("auth/start GHL lookup failed", err);
+      res.status(502).json({
+        error: "Could not reach membership service — please try again",
+        code: "GHL_LOOKUP_FAILED",
+      });
+      return;
+    }
+    if (!contact) {
+      res.status(404).json({
+        error: "We couldn't find your account. Please check with staff",
+        code: "CONTACT_NOT_FOUND",
+      });
+      return;
+    }
+
+    if (!loginNameMatchesContact(parsed.data.name, contact)) {
+      res.status(403).json({
+        error:
+          "Name and phone don't match the same account. Please check both and try again",
+        code: "NAME_PHONE_MISMATCH",
+      });
+      return;
+    }
+
+    // Prefer GHL canonical name so the app never shows a mismatched typed name.
+    const canonicalName =
+      contactFullName(contact).trim() || parsed.data.name.trim();
+
+    let membership: { allowed: boolean; tier: MembershipTier | null };
+    try {
+      membership = await resolveContactMembership(contact.id);
+    } catch (err) {
+      console.error("auth/start pipeline check failed", err);
+      res.status(502).json({
+        error: "Could not verify membership — please try again",
+        code: "PIPELINE_CHECK_FAILED",
+      });
+      return;
+    }
+    if (!membership.allowed || !membership.tier) {
+      res.status(403).json({
+        error: "Not Available",
+        code: "NOT_AVAILABLE",
+      });
+      return;
+    }
+
+    // V1 demo path: no Twilio — GHL match + allowed pipeline is enough to issue a session
+    if (env.SKIP_SMS_OTP) {
+      try {
+        const session = await withTransaction(async (client) => {
+          const member = await upsertMember(client, {
+            name: canonicalName,
+            phone,
+            ghlContactId: contact.id,
+            membershipTier: membership.tier!,
+          });
+          const tokens = await issueSession(client, member.id);
+          return { member, ...tokens };
+        });
+
+        res.json({
+          ok: true,
+          skippedOtp: true,
+          phone,
+          accessToken: session.accessToken,
+          refreshToken: session.refreshToken,
+          expiresIn: session.expiresIn,
+          member: {
+            id: session.member.id,
+            name: session.member.name,
+            phoneNumber: session.member.phone_number,
+            pointsTotal: session.member.points_total,
+            membershipTier: session.member.membership_tier,
+          },
+        });
+      } catch (err) {
+        console.error("auth/start (skip OTP) failed", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        const dbAuth =
+          /password authentication failed/i.test(msg) ||
+          /ECIRCUITBREAKER/i.test(msg) ||
+          /too many authentication failures/i.test(msg);
+        res.status(500).json({
+          error: dbAuth
+            ? "Database connection failed — check DATABASE_URL on the server"
+            : "Login failed",
+          code: dbAuth ? "DB_AUTH_FAILED" : "LOGIN_FAILED",
+        });
+      }
+      return;
+    }
+
+    const { rows: recent } = await query<{
+      id: string;
+      resend_available_at: Date;
+    }>(
+      `SELECT id, resend_available_at
+       FROM otp_challenges
+       WHERE phone_number = $1
+         AND consumed_at IS NULL
+         AND expires_at > NOW()
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [phone]
+    );
+
+    if (recent[0] && recent[0].resend_available_at > new Date()) {
+      const waitSec = Math.ceil(
+        (recent[0].resend_available_at.getTime() - Date.now()) / 1000
+      );
+      res.status(429).json({
+        error: "Please wait before requesting another code",
+        retryAfterSeconds: waitSec,
+      });
+      return;
+    }
+
+    const code = generateOtpCode();
+    const codeHash = await hashOtpCode(code);
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+    const resendAvailableAt = new Date(Date.now() + RESEND_COOLDOWN_MS);
+
+    await query(
+      `INSERT INTO otp_challenges
+        (phone_number, name, ghl_contact_id, code_hash, max_attempts, expires_at, resend_available_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        phone,
+        canonicalName,
+        contact.id,
+        codeHash,
+        MAX_ATTEMPTS,
+        expiresAt,
+        resendAvailableAt,
+      ]
+    );
+
+    await sendSmsOtp(phone, code);
+
+    res.json({
+      ok: true,
+      skippedOtp: false,
+      phone,
+      expiresInSeconds: OTP_TTL_MS / 1000,
+      resendAvailableInSeconds: RESEND_COOLDOWN_MS / 1000,
+    });
+  } catch (err) {
+    // Express 4 does not catch async rejections — without this, Hostinger/CDN
+    // can return an HTML error page and the app shows "Unexpected character: <".
+    console.error("auth/start failed", err);
+    if (!res.headersSent) {
       res.status(500).json({
-        error: dbAuth
-          ? "Database connection failed — check DATABASE_URL on the server"
-          : "Login failed",
-        code: dbAuth ? "DB_AUTH_FAILED" : "LOGIN_FAILED",
+        error: "Login failed — please try again",
+        code: "AUTH_START_FAILED",
       });
     }
-    return;
   }
-
-  const { rows: recent } = await query<{
-    id: string;
-    resend_available_at: Date;
-  }>(
-    `SELECT id, resend_available_at
-     FROM otp_challenges
-     WHERE phone_number = $1
-       AND consumed_at IS NULL
-       AND expires_at > NOW()
-     ORDER BY created_at DESC
-     LIMIT 1`,
-    [phone]
-  );
-
-  if (recent[0] && recent[0].resend_available_at > new Date()) {
-    const waitSec = Math.ceil(
-      (recent[0].resend_available_at.getTime() - Date.now()) / 1000
-    );
-    res.status(429).json({
-      error: "Please wait before requesting another code",
-      retryAfterSeconds: waitSec,
-    });
-    return;
-  }
-
-  const code = generateOtpCode();
-  const codeHash = await hashOtpCode(code);
-  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
-  const resendAvailableAt = new Date(Date.now() + RESEND_COOLDOWN_MS);
-
-  await query(
-    `INSERT INTO otp_challenges
-      (phone_number, name, ghl_contact_id, code_hash, max_attempts, expires_at, resend_available_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      phone,
-      canonicalName,
-      contact.id,
-      codeHash,
-      MAX_ATTEMPTS,
-      expiresAt,
-      resendAvailableAt,
-    ]
-  );
-
-  await sendSmsOtp(phone, code);
-
-  res.json({
-    ok: true,
-    skippedOtp: false,
-    phone,
-    expiresInSeconds: OTP_TTL_MS / 1000,
-    resendAvailableInSeconds: RESEND_COOLDOWN_MS / 1000,
-  });
 });
 
 authRouter.post("/verify", async (req, res) => {
@@ -260,10 +285,25 @@ authRouter.post("/verify", async (req, res) => {
         [challenge.id]
       );
 
+      let membershipTier: MembershipTier = "standard";
+      try {
+        const membership = await resolveContactMembership(
+          challenge.ghl_contact_id
+        );
+        if (!membership.allowed || !membership.tier) {
+          return { kind: "not_available" as const };
+        }
+        membershipTier = membership.tier;
+      } catch (err) {
+        console.error("auth/verify pipeline check failed", err);
+        return { kind: "pipeline_failed" as const };
+      }
+
       const member = await upsertMember(client, {
         name: challenge.name,
         phone,
         ghlContactId: challenge.ghl_contact_id,
+        membershipTier,
       });
 
       const tokens = await issueSession(client, member.id);
@@ -292,6 +332,20 @@ authRouter.post("/verify", async (req, res) => {
       });
       return;
     }
+    if (session.kind === "not_available") {
+      res.status(403).json({
+        error: "Not Available",
+        code: "NOT_AVAILABLE",
+      });
+      return;
+    }
+    if (session.kind === "pipeline_failed") {
+      res.status(502).json({
+        error: "Could not verify membership — please try again",
+        code: "PIPELINE_CHECK_FAILED",
+      });
+      return;
+    }
 
     res.json({
       accessToken: session.accessToken,
@@ -302,6 +356,7 @@ authRouter.post("/verify", async (req, res) => {
         name: session.member.name,
         phoneNumber: session.member.phone_number,
         pointsTotal: session.member.points_total,
+        membershipTier: session.member.membership_tier,
       },
     });
   } catch (err) {
@@ -406,27 +461,35 @@ authRouter.delete("/account", requireMemberAuth, async (req: AuthedRequest, res)
 
 async function upsertMember(
   client: PoolClient,
-  input: { name: string; phone: string; ghlContactId: string }
+  input: {
+    name: string;
+    phone: string;
+    ghlContactId: string;
+    membershipTier: MembershipTier;
+  }
 ): Promise<{
   id: string;
   name: string;
   phone_number: string;
   points_total: number;
+  membership_tier: MembershipTier;
 }> {
   const { rows } = await client.query<{
     id: string;
     name: string;
     phone_number: string;
     points_total: number;
+    membership_tier: MembershipTier;
   }>(
-    `INSERT INTO members (name, phone_number, ghl_contact_id)
-     VALUES ($1, $2, $3)
+    `INSERT INTO members (name, phone_number, ghl_contact_id, membership_tier)
+     VALUES ($1, $2, $3, $4::membership_tier)
      ON CONFLICT (phone_number) DO UPDATE
        SET name = EXCLUDED.name,
            ghl_contact_id = EXCLUDED.ghl_contact_id,
+           membership_tier = EXCLUDED.membership_tier,
            updated_at = NOW()
-     RETURNING id, name, phone_number, points_total`,
-    [input.name, input.phone, input.ghlContactId]
+     RETURNING id, name, phone_number, points_total, membership_tier`,
+    [input.name, input.phone, input.ghlContactId, input.membershipTier]
   );
   return rows[0];
 }

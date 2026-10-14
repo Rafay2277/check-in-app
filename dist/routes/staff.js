@@ -44,7 +44,7 @@ ghlPointsFloor = null) {
      SET points_total = points_total + 1,
          updated_at = NOW()
      WHERE id = $1
-     RETURNING id, name, points_total, ghl_contact_id`, [memberId]);
+     RETURNING id, name, points_total, ghl_contact_id, membership_tier`, [memberId]);
     const member = memberRows[0];
     if (!member) {
         throw new Error("MEMBER_MISSING");
@@ -56,6 +56,7 @@ ghlPointsFloor = null) {
             memberId: member.id,
             ghlContactId: member.ghl_contact_id,
             pointsTotal: member.points_total,
+            membershipTier: member.membership_tier,
             ...extraPayload,
         }),
         dedupeKey,
@@ -65,6 +66,7 @@ ghlPointsFloor = null) {
         name: member.name,
         pointsTotal: member.points_total,
         ghlContactId: member.ghl_contact_id,
+        membershipTier: member.membership_tier,
     };
 }
 async function readGhlPointsFloor(ghlContactId) {
@@ -123,6 +125,8 @@ async function tryValidateRotating(client, token, ghlPointsFloor) {
             id: member.id,
             name: member.name,
             pointsTotal: member.pointsTotal,
+            membershipTier: member.membershipTier,
+            membershipLabel: (0, ghl_1.membershipLabel)(member.membershipTier),
         },
     };
 }
@@ -174,6 +178,8 @@ async function tryValidatePermanent(client, token, ghlPointsFloor) {
                 id: member.id,
                 name: member.name,
                 pointsTotal: member.pointsTotal,
+                membershipTier: member.membershipTier,
+                membershipLabel: (0, ghl_1.membershipLabel)(member.membershipTier),
             },
         };
     }
@@ -188,22 +194,37 @@ async function tryValidatePermanent(client, token, ghlPointsFloor) {
         throw err;
     }
 }
-async function previewGhlPointsFloor(token) {
-    const { rows } = await (0, pool_1.query)(`SELECT m.ghl_contact_id
+async function previewMemberForToken(token) {
+    const { rows } = await (0, pool_1.query)(`SELECT m.id AS member_id, m.ghl_contact_id
      FROM permanent_checkin_tokens p
      INNER JOIN members m ON m.id = p.member_id
      WHERE p.token = $1::uuid
      UNION ALL
-     SELECT m.ghl_contact_id
+     SELECT m.id AS member_id, m.ghl_contact_id
      FROM checkin_tokens c
      INNER JOIN members m ON m.id = c.member_id
      WHERE c.token = $1::uuid
        AND c.status = 'unused'
        AND c.created_at > NOW() - INTERVAL '15 minutes'
      LIMIT 1`, [token]);
-    if (!rows[0]?.ghl_contact_id)
+    const row = rows[0];
+    if (!row?.ghl_contact_id)
         return null;
-    return readGhlPointsFloor(rows[0].ghl_contact_id);
+    return { memberId: row.member_id, ghlContactId: row.ghl_contact_id };
+}
+/** Refresh stored tier from GHL so scanner shows current membership. */
+async function refreshMembershipTierForScan(memberId, ghlContactId) {
+    try {
+        const membership = await (0, ghl_1.resolveContactMembership)(ghlContactId);
+        if (!membership.allowed || !membership.tier)
+            return;
+        await (0, pool_1.query)(`UPDATE members
+       SET membership_tier = $2::membership_tier, updated_at = NOW()
+       WHERE id = $1 AND membership_tier IS DISTINCT FROM $2::membership_tier`, [memberId, membership.tier]);
+    }
+    catch (err) {
+        console.warn("[validate] membership refresh failed; using stored tier", err);
+    }
 }
 exports.staffRouter.post("/session", (req, res) => {
     const parsed = pinSchema.safeParse(req.body);
@@ -236,7 +257,13 @@ exports.staffRouter.post("/validate", auth_1.requireStaffAuth, async (req, res) 
         return;
     }
     try {
-        const ghlPointsFloor = await previewGhlPointsFloor(parsed.data.token);
+        const preview = await previewMemberForToken(parsed.data.token);
+        const ghlPointsFloor = preview
+            ? await readGhlPointsFloor(preview.ghlContactId)
+            : null;
+        if (preview) {
+            await refreshMembershipTierForScan(preview.memberId, preview.ghlContactId);
+        }
         const result = await (0, pool_1.withTransaction)(async (client) => {
             const rotating = await tryValidateRotating(client, parsed.data.token, ghlPointsFloor);
             if (rotating)
