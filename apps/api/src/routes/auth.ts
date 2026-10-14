@@ -18,6 +18,7 @@ import {
   resolveContactMembership,
   type MembershipTier,
 } from "../integrations/ghl";
+import { ensureMembershipTierSchema } from "../lib/membershipTier";
 import {
   contactFullName,
   loginNameMatchesContact,
@@ -474,6 +475,7 @@ async function upsertMember(
   points_total: number;
   membership_tier: MembershipTier;
 }> {
+  await ensureMembershipTierSchema(client);
   const { rows } = await client.query<{
     id: string;
     name: string;

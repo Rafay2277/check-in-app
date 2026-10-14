@@ -8,6 +8,7 @@ const phone_1 = require("../lib/phone");
 const tokens_1 = require("../lib/tokens");
 const config_1 = require("../config");
 const ghl_1 = require("../integrations/ghl");
+const membershipTier_1 = require("../lib/membershipTier");
 const nameMatch_1 = require("../lib/nameMatch");
 const twilio_1 = require("../integrations/twilio");
 const auth_1 = require("../middleware/auth");
@@ -364,6 +365,7 @@ exports.authRouter.delete("/account", auth_1.requireMemberAuth, async (req, res)
     }
 });
 async function upsertMember(client, input) {
+    await (0, membershipTier_1.ensureMembershipTierSchema)(client);
     const { rows } = await client.query(`INSERT INTO members (name, phone_number, ghl_contact_id, membership_tier)
      VALUES ($1, $2, $3, $4::membership_tier)
      ON CONFLICT (phone_number) DO UPDATE

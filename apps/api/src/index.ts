@@ -12,6 +12,7 @@ import { analyticsRouter } from "./routes/analytics";
 import { ghlRouter } from "./routes/ghl";
 import { startOutboxWorker, stopOutboxWorker } from "./worker/outbox";
 import { pool } from "./db/pool";
+import { ensureMembershipTierSchema } from "./lib/membershipTier";
 
 assertLiveIntegrationsConfigured();
 
@@ -157,6 +158,9 @@ httpServer.listen(env.PORT, listenHost, () => {
     isProduction
       ? `Scanner: ${env.PUBLIC_BASE_URL}/scanner/`
       : `HTTP  Scanner (camera only works on localhost): ${env.PUBLIC_BASE_URL}/scanner/`
+  );
+  void ensureMembershipTierSchema().catch((err) =>
+    console.error("[membershipTier] schema ensure failed on boot", err)
   );
   startOutboxWorker();
 });

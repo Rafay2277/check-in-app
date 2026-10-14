@@ -17,6 +17,7 @@ const analytics_1 = require("./routes/analytics");
 const ghl_1 = require("./routes/ghl");
 const outbox_1 = require("./worker/outbox");
 const pool_1 = require("./db/pool");
+const membershipTier_1 = require("./lib/membershipTier");
 (0, config_1.assertLiveIntegrationsConfigured)();
 process.on("uncaughtException", (err) => {
     console.error("[fatal] uncaughtException", err);
@@ -125,6 +126,7 @@ httpServer.listen(config_1.env.PORT, listenHost, () => {
     console.log(isProduction
         ? `Scanner: ${config_1.env.PUBLIC_BASE_URL}/scanner/`
         : `HTTP  Scanner (camera only works on localhost): ${config_1.env.PUBLIC_BASE_URL}/scanner/`);
+    void (0, membershipTier_1.ensureMembershipTierSchema)().catch((err) => console.error("[membershipTier] schema ensure failed on boot", err));
     (0, outbox_1.startOutboxWorker)();
 });
 servers.push(httpServer);
