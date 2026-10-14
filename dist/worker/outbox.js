@@ -54,8 +54,10 @@ async function patchOutboxPayload(id, payload) {
 }
 async function processAwardGhlPoint(task) {
     const payload = { ...task.payload };
-    const { ghlContactId, pointsTotal } = payload;
+    const { ghlContactId } = payload;
     const checkinDate = payload.checkinDate || (0, dates_1.calendarDateInShopTz)();
+    // Prefer the awarded total, but updateGhlCheckinProfile also clamps to live GHL.
+    const pointsTotal = payload.pointsTotal;
     if (!payload.ghlProfileUpdated) {
         await (0, ghl_1.updateGhlCheckinProfile)(ghlContactId, pointsTotal, checkinDate);
         payload.ghlProfileUpdated = true;

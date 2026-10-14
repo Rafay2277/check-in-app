@@ -31,17 +31,18 @@ exports.checkinRouter.get("/me", async (req, res) => {
     catch (err) {
         console.warn("[checkin/me] membership refresh failed; using stored tier", err);
     }
-    // Never drop GHL history — raise local total to at least the CRM value.
+    // GHL is source of truth for the score shown in-app.
     let pointsTotal = member.points_total;
     try {
         const ghlPoints = await (0, ghl_1.getGhlPointsTotal)(member.ghl_contact_id);
-        if (ghlPoints != null && ghlPoints > pointsTotal) {
-            const { rows: updated } = await (0, pool_1.query)(`UPDATE members
-         SET points_total = GREATEST(points_total, $2),
-             updated_at = NOW()
-         WHERE id = $1
-         RETURNING points_total`, [member.id, ghlPoints]);
-            pointsTotal = updated[0]?.points_total ?? ghlPoints;
+        if (ghlPoints != null) {
+            pointsTotal = ghlPoints;
+            if (ghlPoints !== member.points_total) {
+                await (0, pool_1.query)(`UPDATE members
+           SET points_total = GREATEST(points_total, $2),
+               updated_at = NOW()
+           WHERE id = $1`, [member.id, ghlPoints]);
+            }
         }
     }
     catch (err) {

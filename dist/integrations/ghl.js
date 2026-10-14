@@ -420,6 +420,41 @@ async function searchGhlContacts(q, limit = 10) {
     }
     return data.contacts ?? [];
 }
+function parsePointsValue(raw) {
+    if (raw == null || raw === "")
+        return null;
+    const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+    if (!Number.isFinite(n) || n < 0)
+        return null;
+    return Math.floor(n);
+}
+/** GHL returns custom fields as an array or occasionally as a key→value map. */
+function extractCustomFields(contact) {
+    const raw = contact.customFields ?? contact.customField;
+    if (!raw)
+        return [];
+    if (Array.isArray(raw))
+        return raw;
+    if (typeof raw === "object") {
+        return Object.entries(raw).map(([key, value]) => ({ key, value }));
+    }
+    return [];
+}
+function fieldMatchesPointsConfig(f) {
+    const fieldId = config_1.env.GHL_POINTS_FIELD_ID?.trim();
+    const fieldKey = normalizePointsFieldKey(config_1.env.GHL_POINTS_FIELD_KEY || "");
+    if (fieldId && f.id === fieldId)
+        return true;
+    if (!fieldKey)
+        return false;
+    const candidates = [f.key, f.fieldKey]
+        .filter((k) => Boolean(k))
+        .map((k) => normalizePointsFieldKey(k));
+    return candidates.some((k) => k === fieldKey ||
+        k.endsWith(`.${fieldKey}`) ||
+        k.endsWith(`_${fieldKey}`) ||
+        k.includes(fieldKey));
+}
 async function getGhlPointsTotal(ghlContactId) {
     if (config_1.env.MOCK_INTEGRATIONS) {
         return null;
@@ -433,23 +468,18 @@ async function getGhlPointsTotal(ghlContactId) {
         throw new Error(`GHL get contact failed (${res.status}): ${text}`);
     }
     const data = (await res.json());
-    const fields = data.contact?.customFields ?? [];
-    const fieldId = config_1.env.GHL_POINTS_FIELD_ID?.trim();
-    const fieldKey = normalizePointsFieldKey(config_1.env.GHL_POINTS_FIELD_KEY || "");
-    const match = fields.find((f) => {
-        if (fieldId && f.id === fieldId)
-            return true;
-        if (fieldKey && (f.key === fieldKey || f.fieldKey === fieldKey))
-            return true;
-        return false;
-    });
-    if (!match)
+    const fields = extractCustomFields(data.contact ?? {});
+    const match = fields.find(fieldMatchesPointsConfig);
+    if (!match) {
+        if (fields.length > 0) {
+            console.warn(`[ghl] points field not matched for contact ${ghlContactId}; ` +
+                `have ${fields.length} custom fields, ` +
+                `looking for id=${config_1.env.GHL_POINTS_FIELD_ID || "(none)"} ` +
+                `key=${config_1.env.GHL_POINTS_FIELD_KEY || "(none)"}`);
+        }
         return null;
-    const raw = match.value ?? match.field_value;
-    const n = typeof raw === "number" ? raw : Number(String(raw).trim());
-    if (!Number.isFinite(n) || n < 0)
-        return null;
-    return Math.floor(n);
+    }
+    return parsePointsValue(match.value ?? match.field_value ?? match.fieldValue);
 }
 async function updateGhlCheckinProfile(ghlContactId, pointsTotal, checkinDate) {
     if (config_1.env.MOCK_INTEGRATIONS) {
@@ -459,17 +489,29 @@ async function updateGhlCheckinProfile(ghlContactId, pointsTotal, checkinDate) {
     if (!config_1.env.GHL_POINTS_FIELD_KEY && !config_1.env.GHL_POINTS_FIELD_ID) {
         throw new Error("GHL_POINTS_FIELD_KEY or GHL_POINTS_FIELD_ID is required");
     }
+    // Never lower the CRM score if local/outbox is behind (e.g. local was 0).
+    let safeTotal = pointsTotal;
+    try {
+        const live = await getGhlPointsTotal(ghlContactId);
+        if (live != null && live > safeTotal) {
+            console.warn(`[ghl] keeping live points ${live} instead of writing lower ${pointsTotal} for ${ghlContactId}`);
+            safeTotal = live;
+        }
+    }
+    catch (err) {
+        console.warn(`[ghl] could not re-read live points before write for ${ghlContactId}; writing ${pointsTotal}`, err);
+    }
     const customFields = [];
     if (config_1.env.GHL_POINTS_FIELD_ID) {
         customFields.push({
             id: config_1.env.GHL_POINTS_FIELD_ID,
-            field_value: pointsTotal,
+            field_value: safeTotal,
         });
     }
     else {
         customFields.push({
             key: normalizePointsFieldKey(config_1.env.GHL_POINTS_FIELD_KEY),
-            field_value: pointsTotal,
+            field_value: safeTotal,
         });
     }
     const dateKey = normalizePointsFieldKey(config_1.env.GHL_CHECKIN_DATE_FIELD_KEY || "");
