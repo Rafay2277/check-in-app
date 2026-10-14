@@ -15,10 +15,36 @@ import {
 import { env } from "../config";
 import {
   findGhlContactByPhone,
+  getGhlPointsTotal,
   resolveContactMembership,
   type MembershipTier,
 } from "../integrations/ghl";
 import { ensureMembershipTierSchema } from "../lib/membershipTier";
+
+/** Prefer live GHL check-in points over a stale local 0. */
+async function syncPointsFromGhl(
+  memberId: string,
+  ghlContactId: string,
+  localPoints: number
+): Promise<number> {
+  try {
+    const ghlPoints = await getGhlPointsTotal(ghlContactId);
+    if (ghlPoints == null) return localPoints;
+    if (ghlPoints !== localPoints) {
+      await query(
+        `UPDATE members
+         SET points_total = GREATEST(points_total, $2),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [memberId, ghlPoints]
+      );
+    }
+    return Math.max(localPoints, ghlPoints);
+  } catch (err) {
+    console.warn("[auth] GHL points sync failed; using local total", err);
+    return localPoints;
+  }
+}
 import {
   contactFullName,
   loginNameMatchesContact,
@@ -125,6 +151,12 @@ authRouter.post("/start", async (req, res) => {
           return { member, ...tokens };
         });
 
+        const pointsTotal = await syncPointsFromGhl(
+          session.member.id,
+          contact.id,
+          session.member.points_total
+        );
+
         res.json({
           ok: true,
           skippedOtp: true,
@@ -136,7 +168,7 @@ authRouter.post("/start", async (req, res) => {
             id: session.member.id,
             name: session.member.name,
             phoneNumber: session.member.phone_number,
-            pointsTotal: session.member.points_total,
+            pointsTotal,
             membershipTier: session.member.membership_tier,
           },
         });
@@ -311,6 +343,7 @@ authRouter.post("/verify", async (req, res) => {
       return {
         kind: "ok" as const,
         member,
+        ghlContactId: challenge.ghl_contact_id,
         ...tokens,
       };
     });
@@ -348,6 +381,12 @@ authRouter.post("/verify", async (req, res) => {
       return;
     }
 
+    const pointsTotal = await syncPointsFromGhl(
+      session.member.id,
+      session.ghlContactId,
+      session.member.points_total
+    );
+
     res.json({
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
@@ -356,7 +395,7 @@ authRouter.post("/verify", async (req, res) => {
         id: session.member.id,
         name: session.member.name,
         phoneNumber: session.member.phone_number,
-        pointsTotal: session.member.points_total,
+        pointsTotal,
         membershipTier: session.member.membership_tier,
       },
     });
