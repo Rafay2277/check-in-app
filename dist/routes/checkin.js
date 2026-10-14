@@ -31,12 +31,28 @@ exports.checkinRouter.get("/me", async (req, res) => {
     catch (err) {
         console.warn("[checkin/me] membership refresh failed; using stored tier", err);
     }
+    // Never drop GHL history — raise local total to at least the CRM value.
+    let pointsTotal = member.points_total;
+    try {
+        const ghlPoints = await (0, ghl_1.getGhlPointsTotal)(member.ghl_contact_id);
+        if (ghlPoints != null && ghlPoints > pointsTotal) {
+            const { rows: updated } = await (0, pool_1.query)(`UPDATE members
+         SET points_total = GREATEST(points_total, $2),
+             updated_at = NOW()
+         WHERE id = $1
+         RETURNING points_total`, [member.id, ghlPoints]);
+            pointsTotal = updated[0]?.points_total ?? ghlPoints;
+        }
+    }
+    catch (err) {
+        console.warn("[checkin/me] GHL points sync failed; using local total", err);
+    }
     const checkedInToday = await (0, dailyCheckin_1.memberCheckedInToday)(member.id);
     res.json({
         id: member.id,
         name: member.name,
         phoneNumber: member.phone_number,
-        pointsTotal: member.points_total,
+        pointsTotal,
         membershipTier,
         checkedInToday,
         checkinDate: (0, dates_1.calendarDateInShopTz)(),
