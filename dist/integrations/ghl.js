@@ -9,6 +9,7 @@ exports.contactInAllowedPipelines = contactInAllowedPipelines;
 exports.membershipLabel = membershipLabel;
 exports.searchGhlContacts = searchGhlContacts;
 exports.getGhlPointsTotal = getGhlPointsTotal;
+exports.inspectGhlPoints = inspectGhlPoints;
 exports.updateGhlCheckinProfile = updateGhlCheckinProfile;
 exports.updateGhlPointsTotal = updateGhlPointsTotal;
 exports.addGhlCheckinNote = addGhlCheckinNote;
@@ -443,11 +444,11 @@ function extractCustomFields(contact) {
 function fieldMatchesPointsConfig(f) {
     const fieldId = config_1.env.GHL_POINTS_FIELD_ID?.trim();
     const fieldKey = normalizePointsFieldKey(config_1.env.GHL_POINTS_FIELD_KEY || "");
-    if (fieldId && f.id === fieldId)
+    if (fieldId && (f.id === fieldId || f.fieldId === fieldId))
         return true;
     if (!fieldKey)
         return false;
-    const candidates = [f.key, f.fieldKey]
+    const candidates = [f.key, f.fieldKey, f.name]
         .filter((k) => Boolean(k))
         .map((k) => normalizePointsFieldKey(k));
     return candidates.some((k) => k === fieldKey ||
@@ -455,10 +456,23 @@ function fieldMatchesPointsConfig(f) {
         k.endsWith(`_${fieldKey}`) ||
         k.includes(fieldKey));
 }
-async function getGhlPointsTotal(ghlContactId) {
-    if (config_1.env.MOCK_INTEGRATIONS) {
-        return null;
-    }
+function fieldValueRaw(f) {
+    return f.value ?? f.field_value ?? f.fieldValue;
+}
+/** Loose fallback: label/key looks like check-in points. */
+function fieldLooksLikeCheckinPoints(f) {
+    const blob = [f.key, f.fieldKey, f.name, f.id, f.fieldId]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+    return (blob.includes("checkinpoint") ||
+        blob.includes("checkinpoints") ||
+        blob.includes("loyaltypoint") ||
+        blob === "points" ||
+        blob.endsWith("points"));
+}
+async function fetchGhlContactRaw(ghlContactId) {
     const res = await fetch(`${config_1.env.GHL_API_BASE_URL}/contacts/${ghlContactId}`, {
         method: "GET",
         headers: ghlHeaders(),
@@ -468,18 +482,78 @@ async function getGhlPointsTotal(ghlContactId) {
         throw new Error(`GHL get contact failed (${res.status}): ${text}`);
     }
     const data = (await res.json());
-    const fields = extractCustomFields(data.contact ?? {});
-    const match = fields.find(fieldMatchesPointsConfig);
-    if (!match) {
+    const contact = data.contact ?? {};
+    return { contact, fields: extractCustomFields(contact) };
+}
+function resolvePointsFromFields(fields) {
+    const configured = fields.find(fieldMatchesPointsConfig);
+    if (configured) {
+        return {
+            points: parsePointsValue(fieldValueRaw(configured)),
+            matchedBy: config_1.env.GHL_POINTS_FIELD_ID?.trim() ? "id" : "key",
+            matched: {
+                id: configured.id || configured.fieldId,
+                key: configured.key || configured.fieldKey || configured.name,
+                value: fieldValueRaw(configured),
+            },
+        };
+    }
+    const fallback = fields.find((f) => fieldLooksLikeCheckinPoints(f) && parsePointsValue(fieldValueRaw(f)) != null);
+    if (fallback) {
+        return {
+            points: parsePointsValue(fieldValueRaw(fallback)),
+            matchedBy: "fallback",
+            matched: {
+                id: fallback.id || fallback.fieldId,
+                key: fallback.key || fallback.fieldKey || fallback.name,
+                value: fieldValueRaw(fallback),
+            },
+        };
+    }
+    return { points: null, matchedBy: null };
+}
+async function getGhlPointsTotal(ghlContactId) {
+    if (config_1.env.MOCK_INTEGRATIONS) {
+        return null;
+    }
+    const { fields } = await fetchGhlContactRaw(ghlContactId);
+    const resolved = resolvePointsFromFields(fields);
+    if (resolved.points == null) {
         if (fields.length > 0) {
             console.warn(`[ghl] points field not matched for contact ${ghlContactId}; ` +
                 `have ${fields.length} custom fields, ` +
                 `looking for id=${config_1.env.GHL_POINTS_FIELD_ID || "(none)"} ` +
                 `key=${config_1.env.GHL_POINTS_FIELD_KEY || "(none)"}`);
         }
-        return null;
+        else {
+            console.warn(`[ghl] contact ${ghlContactId} returned 0 custom fields for points lookup`);
+        }
     }
-    return parsePointsValue(match.value ?? match.field_value ?? match.fieldValue);
+    else if (resolved.matchedBy === "fallback") {
+        console.warn(`[ghl] points matched via fallback for ${ghlContactId}:`, resolved.matched);
+    }
+    return resolved.points;
+}
+/** Temporary diagnostics for contacts where live points fail to sync. */
+async function inspectGhlPoints(ghlContactId) {
+    if (config_1.env.MOCK_INTEGRATIONS) {
+        return { mock: true, points: null };
+    }
+    const { fields } = await fetchGhlContactRaw(ghlContactId);
+    const resolved = resolvePointsFromFields(fields);
+    return {
+        configuredFieldId: config_1.env.GHL_POINTS_FIELD_ID || null,
+        configuredFieldKey: config_1.env.GHL_POINTS_FIELD_KEY || null,
+        fieldCount: fields.length,
+        points: resolved.points,
+        matchedBy: resolved.matchedBy,
+        matched: resolved.matched || null,
+        sampleFields: fields.slice(0, 25).map((f) => ({
+            id: f.id || f.fieldId || null,
+            key: f.key || f.fieldKey || f.name || null,
+            value: fieldValueRaw(f) ?? null,
+        })),
+    };
 }
 async function updateGhlCheckinProfile(ghlContactId, pointsTotal, checkinDate) {
     if (config_1.env.MOCK_INTEGRATIONS) {

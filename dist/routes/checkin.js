@@ -10,6 +10,40 @@ const dailyCheckin_1 = require("../lib/dailyCheckin");
 const ghl_1 = require("../integrations/ghl");
 exports.checkinRouter = (0, express_1.Router)();
 exports.checkinRouter.use(auth_1.requireMemberAuth);
+/** Debug: what GHL returns for this member's check-in points field. */
+exports.checkinRouter.get("/points-debug", async (req, res) => {
+    const { rows } = await (0, pool_1.query)(`SELECT id, name, points_total, ghl_contact_id FROM members WHERE id = $1`, [req.memberId]);
+    const member = rows[0];
+    if (!member) {
+        res.status(404).json({ error: "Member not found" });
+        return;
+    }
+    try {
+        const inspection = await (0, ghl_1.inspectGhlPoints)(member.ghl_contact_id);
+        res.json({
+            member: {
+                id: member.id,
+                name: member.name,
+                localPoints: member.points_total,
+                ghlContactId: member.ghl_contact_id,
+            },
+            ghl: inspection,
+        });
+    }
+    catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.status(502).json({
+            error: "GHL points inspect failed",
+            detail: message,
+            member: {
+                id: member.id,
+                name: member.name,
+                localPoints: member.points_total,
+                ghlContactId: member.ghl_contact_id,
+            },
+        });
+    }
+});
 exports.checkinRouter.get("/me", async (req, res) => {
     const { rows } = await (0, pool_1.query)(`SELECT id, name, phone_number, points_total, membership_tier, ghl_contact_id
      FROM members WHERE id = $1`, [req.memberId]);

@@ -42,6 +42,8 @@ export declare function membershipLabel(tier: MembershipTier): string;
  */
 export declare function searchGhlContacts(q: string, limit?: number): Promise<GhlContact[]>;
 export declare function getGhlPointsTotal(ghlContactId: string): Promise<number | null>;
+/** Temporary diagnostics for contacts where live points fail to sync. */
+export declare function inspectGhlPoints(ghlContactId: string): Promise<Record<string, unknown>>;
 export declare function updateGhlCheckinProfile(ghlContactId: string, pointsTotal: number, checkinDate: string): Promise<void>;
 export declare function updateGhlPointsTotal(ghlContactId: string, pointsTotal: number): Promise<void>;
 export declare function addGhlCheckinNote(ghlContactId: string, pointsTotal: number, checkinDate?: string): Promise<void>;
