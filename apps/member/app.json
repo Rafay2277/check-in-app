@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fourtillfour",
     "slug": "checkin-member",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "checkin",
@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fourtillfour.checkin",
-      "buildNumber": "12",
+      "buildNumber": "13",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -21,7 +21,7 @@
         "backgroundColor": "#111111"
       },
       "package": "com.fourtillfour.checkin",
-      "versionCode": 10
+      "versionCode": 11
     },
     "plugins": [
       "expo-router",

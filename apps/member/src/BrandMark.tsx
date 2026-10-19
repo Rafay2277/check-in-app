@@ -19,7 +19,11 @@ export function BrandMark({
   showWordmark = true,
 }: Props) {
   if (variant === "circle") {
-    const diameter = size;
+    // Circle mark reads smaller than the winged logo at the same size prop.
+    const diameter = size * 1.18;
+    // Montserrat Bold "4" sits high in the em-box; push down + slight left
+    // so it reads optically centered in the circle.
+    const fontSize = diameter * 0.52;
     return (
       <View style={styles.wrap}>
         <View
@@ -32,7 +36,18 @@ export function BrandMark({
             },
           ]}
         >
-          <Text style={[styles.circleFour, { fontSize: diameter * 0.52 }]}>
+          <Text
+            style={[
+              styles.circleFour,
+              {
+                fontSize,
+                lineHeight: fontSize * 1.05,
+                height: fontSize * 1.05,
+                marginTop: diameter * 0.06,
+                transform: [{ translateX: -diameter * 0.02 }],
+              },
+            ]}
+          >
             4
           </Text>
         </View>
@@ -81,6 +96,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansBold,
     includeFontPadding: false,
     textAlign: "center",
+    textAlignVertical: "center",
   },
   wordmark: {
     color: colors.ink,
