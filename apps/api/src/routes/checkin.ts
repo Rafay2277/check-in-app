@@ -14,7 +14,7 @@ import {
 import { ensureMemberNumberSchema } from "../lib/memberNumber";
 
 /** Temporary: include GHL field samples on /me until member # matching is confirmed. */
-const DEBUG_MEMBER_NUMBER = true;
+const DEBUG_MEMBER_NUMBER = false;
 
 export const checkinRouter = Router();
 

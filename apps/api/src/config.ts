@@ -77,7 +77,14 @@ const envSchema = z.object({
   GHL_POINTS_FIELD_ID: z.string().optional().default(""),
   /** Contact custom field for cafe member # ({{contact.member_number}}). */
   GHL_MEMBER_NUMBER_FIELD_KEY: z.string().optional().default("member_number"),
-  GHL_MEMBER_NUMBER_FIELD_ID: z.string().optional().default(""),
+  /**
+   * GHL custom field id for member_number (contacts often return id+value only).
+   * Default is the Fourtillfour location field confirmed via live contact dump.
+   */
+  GHL_MEMBER_NUMBER_FIELD_ID: z
+    .string()
+    .optional()
+    .default("6usIrzLfAreUjoe5DnkO"),
   GHL_CHECKIN_DATE_FIELD_KEY: z.string().optional().default("checkin_date"),
   GHL_CHECKIN_DATE_FIELD_ID: z.string().optional().default(""),
   /** Custom Object schema key for per-visit history (empty = skip). */

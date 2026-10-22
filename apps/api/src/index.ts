@@ -35,6 +35,9 @@ app.get("/health", (_req, res) => {
     mockIntegrations: env.MOCK_INTEGRATIONS,
     skipSmsOtp: env.SKIP_SMS_OTP,
     httpsPort: env.HTTPS_PORT,
+    // Bump when verifying Hostinger picked up a deploy
+    apiBuild: "2026-10-22-member-number-v3",
+    memberNumberFieldId: Boolean(env.GHL_MEMBER_NUMBER_FIELD_ID),
   });
 });
 

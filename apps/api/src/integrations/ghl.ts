@@ -720,13 +720,17 @@ function knownNonMemberFieldIds(): Set<string> {
   );
 }
 
-/** Value shape typical of cafe member #s (not dates, not big point totals). */
+/** Value shape typical of cafe member #s (not dates, years, or car models). */
 function valueLooksLikeMemberNumber(raw: unknown): boolean {
   const parsed = parseMemberNumberValue(raw);
   if (!parsed) return false;
   // Dates / timestamps
   if (/^\d{4}-\d{2}-\d{2}/.test(parsed)) return false;
+  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(parsed)) return false;
   if (/^\d{10,}$/.test(parsed)) return false;
+  // Car year / model noise (e.g. 1984, 911)
+  if (/^(19|20)\d{2}$/.test(parsed)) return false;
+  if (/^(911|928|944|718|992|993|996|997)$/.test(parsed)) return false;
   // Member #s are usually short codes
   if (parsed.length > 12) return false;
   // Prefer mostly alphanumeric / digits
