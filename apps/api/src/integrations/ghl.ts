@@ -708,24 +708,6 @@ function resolvePointsFromFields(fields: GhlCustomField[]): {
   return { points: null, matchedBy: null };
 }
 
-function fieldMatchesMemberNumberConfig(f: GhlCustomField): boolean {
-  const fieldId = env.GHL_MEMBER_NUMBER_FIELD_ID?.trim();
-  const fieldKey = normalizePointsFieldKey(
-    env.GHL_MEMBER_NUMBER_FIELD_KEY || "member_number"
-  );
-  if (fieldId && (f.id === fieldId || f.fieldId === fieldId)) return true;
-  if (!fieldKey) return false;
-  const candidates = [f.key, f.fieldKey, f.name]
-    .filter((k): k is string => Boolean(k))
-    .map((k) => normalizePointsFieldKey(k));
-  return candidates.some(
-    (k) =>
-      k === fieldKey ||
-      k.endsWith(`.${fieldKey}`) ||
-      k.endsWith(`_${fieldKey}`)
-  );
-}
-
 function parseMemberNumberValue(raw: unknown): string | null {
   if (raw == null) return null;
   let s = String(raw).trim();
@@ -738,10 +720,158 @@ function parseMemberNumberValue(raw: unknown): string | null {
   return s || null;
 }
 
-function resolveMemberNumberFromFields(fields: GhlCustomField[]): string | null {
-  const configured = fields.find(fieldMatchesMemberNumberConfig);
-  if (configured) return parseMemberNumberValue(fieldValueRaw(configured));
-  return null;
+function memberNumberFieldKey(): string {
+  return normalizePointsFieldKey(
+    env.GHL_MEMBER_NUMBER_FIELD_KEY || "member_number"
+  );
+}
+
+function fieldLooksLikeMemberNumber(f: GhlCustomField): boolean {
+  const blob = [f.key, f.fieldKey, f.name]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  return (
+    blob === "membernumber" ||
+    blob === "memberno" ||
+    blob === "membernum" ||
+    blob.includes("membernumber") ||
+    blob.includes("memberno")
+  );
+}
+
+function fieldMatchesMemberNumberConfig(
+  f: GhlCustomField,
+  resolvedFieldId: string | null
+): boolean {
+  const configuredId = env.GHL_MEMBER_NUMBER_FIELD_ID?.trim() || resolvedFieldId;
+  if (configuredId && (f.id === configuredId || f.fieldId === configuredId)) {
+    return true;
+  }
+  const fieldKey = memberNumberFieldKey();
+  if (!fieldKey) return false;
+  const candidates = [f.key, f.fieldKey, f.name]
+    .filter((k): k is string => Boolean(k))
+    .map((k) => normalizePointsFieldKey(k));
+  return candidates.some(
+    (k) =>
+      k === fieldKey ||
+      k.endsWith(`.${fieldKey}`) ||
+      k.endsWith(`_${fieldKey}`)
+  );
+}
+
+/**
+ * GHL contact payloads often only include `{ id, value }` for custom fields.
+ * Resolve the real field id for member_number from location field definitions.
+ */
+let cachedMemberNumberFieldId: string | null | undefined;
+
+async function resolveMemberNumberFieldId(): Promise<string | null> {
+  const configured = env.GHL_MEMBER_NUMBER_FIELD_ID?.trim();
+  if (configured) return configured;
+  if (cachedMemberNumberFieldId !== undefined) return cachedMemberNumberFieldId;
+
+  const fieldKey = memberNumberFieldKey();
+  if (!fieldKey || !env.GHL_LOCATION_ID) {
+    cachedMemberNumberFieldId = null;
+    return null;
+  }
+
+  try {
+    const url = `${env.GHL_API_BASE_URL}/locations/${encodeURIComponent(
+      env.GHL_LOCATION_ID
+    )}/customFields`;
+    const res = await fetch(url, { method: "GET", headers: ghlHeaders() });
+    if (!res.ok) {
+      const text = await res.text();
+      console.warn(
+        `[ghl] could not list custom fields for member_number (${res.status}): ${text.slice(0, 180)}`
+      );
+      cachedMemberNumberFieldId = null;
+      return null;
+    }
+    const data = (await res.json()) as {
+      customFields?: Array<{
+        id?: string;
+        fieldKey?: string;
+        key?: string;
+        name?: string;
+      }>;
+    };
+    const list = Array.isArray(data.customFields) ? data.customFields : [];
+    const match = list.find((f) => {
+      const candidates = [f.fieldKey, f.key, f.name]
+        .filter((k): k is string => Boolean(k))
+        .map((k) => normalizePointsFieldKey(k));
+      return candidates.some(
+        (k) =>
+          k === fieldKey ||
+          k.endsWith(`.${fieldKey}`) ||
+          k.endsWith(`_${fieldKey}`) ||
+          k.replace(/[^a-z0-9]+/gi, "").toLowerCase() === "membernumber"
+      );
+    });
+    cachedMemberNumberFieldId = match?.id || null;
+    if (cachedMemberNumberFieldId) {
+      console.log(
+        `[ghl] resolved member_number field id=${cachedMemberNumberFieldId}`
+      );
+    } else {
+      console.warn(
+        `[ghl] no custom field matched key=${fieldKey} among ${list.length} definitions`
+      );
+    }
+    return cachedMemberNumberFieldId;
+  } catch (err) {
+    console.warn("[ghl] member_number field id resolve failed", err);
+    cachedMemberNumberFieldId = null;
+    return null;
+  }
+}
+
+async function resolveMemberNumberFromFields(
+  fields: GhlCustomField[]
+): Promise<{
+  memberNumber: string | null;
+  matchedBy: "id" | "key" | "fallback" | null;
+  matched?: { id?: string; key?: string; value?: unknown };
+}> {
+  const resolvedId = await resolveMemberNumberFieldId();
+  const configured = fields.find((f) =>
+    fieldMatchesMemberNumberConfig(f, resolvedId)
+  );
+  if (configured) {
+    return {
+      memberNumber: parseMemberNumberValue(fieldValueRaw(configured)),
+      matchedBy: env.GHL_MEMBER_NUMBER_FIELD_ID?.trim() || resolvedId ? "id" : "key",
+      matched: {
+        id: configured.id || configured.fieldId,
+        key: configured.key || configured.fieldKey || configured.name,
+        value: fieldValueRaw(configured),
+      },
+    };
+  }
+
+  const fallback = fields.find(
+    (f) =>
+      fieldLooksLikeMemberNumber(f) &&
+      parseMemberNumberValue(fieldValueRaw(f)) != null
+  );
+  if (fallback) {
+    return {
+      memberNumber: parseMemberNumberValue(fieldValueRaw(fallback)),
+      matchedBy: "fallback",
+      matched: {
+        id: fallback.id || fallback.fieldId,
+        key: fallback.key || fallback.fieldKey || fallback.name,
+        value: fieldValueRaw(fallback),
+      },
+    };
+  }
+
+  return { memberNumber: null, matchedBy: null };
 }
 
 /** Points + member # from one GHL contact fetch. */
@@ -754,6 +884,7 @@ export async function getGhlContactAppFields(
 
   const { fields } = await fetchGhlContactRaw(ghlContactId);
   const resolved = resolvePointsFromFields(fields);
+  const member = await resolveMemberNumberFromFields(fields);
 
   if (resolved.points == null) {
     if (fields.length > 0) {
@@ -775,9 +906,29 @@ export async function getGhlContactAppFields(
     );
   }
 
+  if (member.memberNumber == null && fields.length > 0) {
+    console.warn(
+      `[ghl] member_number not matched for contact ${ghlContactId}; ` +
+        `looking for id=${env.GHL_MEMBER_NUMBER_FIELD_ID || "(auto)"} ` +
+        `key=${memberNumberFieldKey()}; ` +
+        `sample=${JSON.stringify(
+          fields.slice(0, 12).map((f) => ({
+            id: f.id || f.fieldId || null,
+            key: f.key || f.fieldKey || f.name || null,
+            value: fieldValueRaw(f) ?? null,
+          }))
+        )}`
+    );
+  } else if (member.matchedBy === "fallback") {
+    console.warn(
+      `[ghl] member_number matched via fallback for ${ghlContactId}:`,
+      member.matched
+    );
+  }
+
   return {
     points: resolved.points,
-    memberNumber: resolveMemberNumberFromFields(fields),
+    memberNumber: member.memberNumber,
   };
 }
 
@@ -795,24 +946,32 @@ export async function getGhlMemberNumber(
   return memberNumber;
 }
 
-/** Temporary diagnostics for contacts where live points fail to sync. */
+/** Temporary diagnostics for contacts where live points / member # fail to sync. */
 export async function inspectGhlPoints(
   ghlContactId: string
 ): Promise<Record<string, unknown>> {
   if (env.MOCK_INTEGRATIONS) {
-    return { mock: true, points: null };
+    return { mock: true, points: null, memberNumber: null };
   }
 
   const { fields } = await fetchGhlContactRaw(ghlContactId);
   const resolved = resolvePointsFromFields(fields);
+  const member = await resolveMemberNumberFromFields(fields);
+  const resolvedMemberFieldId = await resolveMemberNumberFieldId();
   return {
     configuredFieldId: env.GHL_POINTS_FIELD_ID || null,
     configuredFieldKey: env.GHL_POINTS_FIELD_KEY || null,
+    memberNumberFieldId:
+      env.GHL_MEMBER_NUMBER_FIELD_ID?.trim() || resolvedMemberFieldId,
+    memberNumberFieldKey: memberNumberFieldKey(),
     fieldCount: fields.length,
     points: resolved.points,
     matchedBy: resolved.matchedBy,
     matched: resolved.matched || null,
-    sampleFields: fields.slice(0, 25).map((f) => ({
+    memberNumber: member.memberNumber,
+    memberNumberMatchedBy: member.matchedBy,
+    memberNumberMatched: member.matched || null,
+    sampleFields: fields.slice(0, 40).map((f) => ({
       id: f.id || f.fieldId || null,
       key: f.key || f.fieldKey || f.name || null,
       value: fieldValueRaw(f) ?? null,
