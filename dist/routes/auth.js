@@ -9,23 +9,30 @@ const tokens_1 = require("../lib/tokens");
 const config_1 = require("../config");
 const ghl_1 = require("../integrations/ghl");
 const membershipTier_1 = require("../lib/membershipTier");
-/** Prefer live GHL check-in points over a stale local 0. */
-async function syncPointsFromGhl(memberId, ghlContactId, localPoints) {
+const memberNumber_1 = require("../lib/memberNumber");
+/** Prefer live GHL check-in points + member # over stale local values. */
+async function syncProfileFromGhl(memberId, ghlContactId, localPoints) {
     try {
-        const ghlPoints = await (0, ghl_1.getGhlPointsTotal)(ghlContactId);
-        if (ghlPoints == null)
-            return localPoints;
-        if (ghlPoints !== localPoints) {
-            await (0, pool_1.query)(`UPDATE members
-         SET points_total = GREATEST(points_total, $2),
-             updated_at = NOW()
-         WHERE id = $1`, [memberId, ghlPoints]);
+        const ghl = await (0, ghl_1.getGhlContactAppFields)(ghlContactId);
+        let pointsTotal = localPoints;
+        if (ghl.points != null) {
+            pointsTotal = Math.max(localPoints, ghl.points);
+            if (ghl.points !== localPoints) {
+                await (0, pool_1.query)(`UPDATE members
+           SET points_total = GREATEST(points_total, $2),
+               updated_at = NOW()
+           WHERE id = $1`, [memberId, ghl.points]);
+            }
         }
-        return Math.max(localPoints, ghlPoints);
+        await (0, memberNumber_1.ensureMemberNumberSchema)();
+        await (0, pool_1.query)(`UPDATE members
+       SET member_number = $2, updated_at = NOW()
+       WHERE id = $1`, [memberId, ghl.memberNumber]);
+        return { pointsTotal, memberNumber: ghl.memberNumber };
     }
     catch (err) {
-        console.warn("[auth] GHL points sync failed; using local total", err);
-        return localPoints;
+        console.warn("[auth] GHL profile sync failed; using local values", err);
+        return { pointsTotal: localPoints, memberNumber: null };
     }
 }
 const nameMatch_1 = require("../lib/nameMatch");
@@ -118,7 +125,7 @@ exports.authRouter.post("/start", async (req, res) => {
                     const tokens = await issueSession(client, member.id);
                     return { member, ...tokens };
                 });
-                const pointsTotal = await syncPointsFromGhl(session.member.id, contact.id, session.member.points_total);
+                const profile = await syncProfileFromGhl(session.member.id, contact.id, session.member.points_total);
                 res.json({
                     ok: true,
                     skippedOtp: true,
@@ -130,7 +137,8 @@ exports.authRouter.post("/start", async (req, res) => {
                         id: session.member.id,
                         name: session.member.name,
                         phoneNumber: session.member.phone_number,
-                        pointsTotal,
+                        pointsTotal: profile.pointsTotal,
+                        memberNumber: profile.memberNumber,
                         membershipTier: session.member.membership_tier,
                     },
                 });
@@ -296,7 +304,7 @@ exports.authRouter.post("/verify", async (req, res) => {
             });
             return;
         }
-        const pointsTotal = await syncPointsFromGhl(session.member.id, session.ghlContactId, session.member.points_total);
+        const profile = await syncProfileFromGhl(session.member.id, session.ghlContactId, session.member.points_total);
         res.json({
             accessToken: session.accessToken,
             refreshToken: session.refreshToken,
@@ -305,7 +313,8 @@ exports.authRouter.post("/verify", async (req, res) => {
                 id: session.member.id,
                 name: session.member.name,
                 phoneNumber: session.member.phone_number,
-                pointsTotal,
+                pointsTotal: profile.pointsTotal,
+                memberNumber: profile.memberNumber,
                 membershipTier: session.member.membership_tier,
             },
         });

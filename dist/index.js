@@ -18,6 +18,7 @@ const ghl_1 = require("./routes/ghl");
 const outbox_1 = require("./worker/outbox");
 const pool_1 = require("./db/pool");
 const membershipTier_1 = require("./lib/membershipTier");
+const memberNumber_1 = require("./lib/memberNumber");
 (0, config_1.assertLiveIntegrationsConfigured)();
 process.on("uncaughtException", (err) => {
     console.error("[fatal] uncaughtException", err);
@@ -34,6 +35,9 @@ app.get("/health", (_req, res) => {
         mockIntegrations: config_1.env.MOCK_INTEGRATIONS,
         skipSmsOtp: config_1.env.SKIP_SMS_OTP,
         httpsPort: config_1.env.HTTPS_PORT,
+        // Bump when verifying Hostinger picked up a deploy
+        apiBuild: "2026-10-22-member-number-v3",
+        memberNumberFieldId: Boolean(config_1.env.GHL_MEMBER_NUMBER_FIELD_ID),
     });
 });
 /** Live DB probe — use this to verify Hostinger DATABASE_URL without reading secrets.
@@ -127,6 +131,7 @@ httpServer.listen(config_1.env.PORT, listenHost, () => {
         ? `Scanner: ${config_1.env.PUBLIC_BASE_URL}/scanner/`
         : `HTTP  Scanner (camera only works on localhost): ${config_1.env.PUBLIC_BASE_URL}/scanner/`);
     void (0, membershipTier_1.ensureMembershipTierSchema)().catch((err) => console.error("[membershipTier] schema ensure failed on boot", err));
+    void (0, memberNumber_1.ensureMemberNumberSchema)().catch((err) => console.error("[memberNumber] schema ensure failed on boot", err));
     (0, outbox_1.startOutboxWorker)();
 });
 servers.push(httpServer);

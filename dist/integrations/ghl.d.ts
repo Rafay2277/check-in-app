@@ -41,8 +41,14 @@ export declare function membershipLabel(tier: MembershipTier): string;
  * Read-only; used by staff scanner lookup.
  */
 export declare function searchGhlContacts(q: string, limit?: number): Promise<GhlContact[]>;
+/** Points + member # from one GHL contact fetch. */
+export declare function getGhlContactAppFields(ghlContactId: string): Promise<{
+    points: number | null;
+    memberNumber: string | null;
+}>;
 export declare function getGhlPointsTotal(ghlContactId: string): Promise<number | null>;
-/** Temporary diagnostics for contacts where live points fail to sync. */
+export declare function getGhlMemberNumber(ghlContactId: string): Promise<string | null>;
+/** Temporary diagnostics for contacts where live points / member # fail to sync. */
 export declare function inspectGhlPoints(ghlContactId: string): Promise<Record<string, unknown>>;
 export declare function updateGhlCheckinProfile(ghlContactId: string, pointsTotal: number, checkinDate: string): Promise<void>;
 export declare function updateGhlPointsTotal(ghlContactId: string, pointsTotal: number): Promise<void>;
