@@ -10,7 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.fourtillfour.checkin",
-      "buildNumber": "14",
+      "buildNumber": "15",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -21,7 +21,7 @@
         "backgroundColor": "#111111"
       },
       "package": "com.fourtillfour.checkin",
-      "versionCode": 12
+      "versionCode": 13
     },
     "plugins": [
       "expo-router",
