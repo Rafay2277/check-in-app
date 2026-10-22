@@ -646,7 +646,7 @@ function fieldLooksLikeCheckinPoints(f: GhlCustomField): boolean {
 }
 
 async function fetchGhlContactRaw(ghlContactId: string): Promise<{
-  contact: {
+  contact: Record<string, unknown> & {
     customFields?: GhlCustomField[] | Record<string, unknown>;
     customField?: GhlCustomField[] | Record<string, unknown>;
   };
@@ -663,13 +663,74 @@ async function fetchGhlContactRaw(ghlContactId: string): Promise<{
   }
 
   const data = (await res.json()) as {
-    contact?: {
+    contact?: Record<string, unknown> & {
       customFields?: GhlCustomField[] | Record<string, unknown>;
       customField?: GhlCustomField[] | Record<string, unknown>;
     };
   };
   const contact = data.contact ?? {};
   return { contact, fields: extractCustomFields(contact) };
+}
+
+/** Walk a contact payload for member_number even if nested oddly. */
+function memberNumberFromContactObject(
+  contact: Record<string, unknown>
+): string | null {
+  const direct = [
+    contact.member_number,
+    contact.memberNumber,
+    (contact as { memberNumber?: unknown }).memberNumber,
+  ];
+  for (const v of direct) {
+    const parsed = parseMemberNumberValue(v);
+    if (parsed) return parsed;
+  }
+
+  const stack: unknown[] = [contact];
+  const seen = new Set<unknown>();
+  while (stack.length) {
+    const cur = stack.pop();
+    if (!cur || typeof cur !== "object" || seen.has(cur)) continue;
+    seen.add(cur);
+    if (Array.isArray(cur)) {
+      for (const item of cur) stack.push(item);
+      continue;
+    }
+    for (const [k, v] of Object.entries(cur as Record<string, unknown>)) {
+      const nk = normalizePointsFieldKey(k);
+      if (
+        nk === "member_number" ||
+        nk.replace(/[^a-z0-9]+/gi, "").toLowerCase() === "membernumber"
+      ) {
+        const parsed = parseMemberNumberValue(v);
+        if (parsed) return parsed;
+      }
+      if (v && typeof v === "object") stack.push(v);
+    }
+  }
+  return null;
+}
+
+function knownNonMemberFieldIds(): Set<string> {
+  return new Set(
+    [
+      env.GHL_POINTS_FIELD_ID?.trim(),
+      env.GHL_CHECKIN_DATE_FIELD_ID?.trim(),
+    ].filter((id): id is string => Boolean(id))
+  );
+}
+
+/** Value shape typical of cafe member #s (not dates, not big point totals). */
+function valueLooksLikeMemberNumber(raw: unknown): boolean {
+  const parsed = parseMemberNumberValue(raw);
+  if (!parsed) return false;
+  // Dates / timestamps
+  if (/^\d{4}-\d{2}-\d{2}/.test(parsed)) return false;
+  if (/^\d{10,}$/.test(parsed)) return false;
+  // Member #s are usually short codes
+  if (parsed.length > 12) return false;
+  // Prefer mostly alphanumeric / digits
+  return /^[A-Za-z0-9_-]+$/.test(parsed);
 }
 
 function resolvePointsFromFields(fields: GhlCustomField[]): {
@@ -832,10 +893,11 @@ async function resolveMemberNumberFieldId(): Promise<string | null> {
 }
 
 async function resolveMemberNumberFromFields(
-  fields: GhlCustomField[]
+  fields: GhlCustomField[],
+  contact?: Record<string, unknown>
 ): Promise<{
   memberNumber: string | null;
-  matchedBy: "id" | "key" | "fallback" | null;
+  matchedBy: "id" | "key" | "fallback" | "value" | "contact" | null;
   matched?: { id?: string; key?: string; value?: unknown };
 }> {
   const resolvedId = await resolveMemberNumberFieldId();
@@ -843,15 +905,19 @@ async function resolveMemberNumberFromFields(
     fieldMatchesMemberNumberConfig(f, resolvedId)
   );
   if (configured) {
-    return {
-      memberNumber: parseMemberNumberValue(fieldValueRaw(configured)),
-      matchedBy: env.GHL_MEMBER_NUMBER_FIELD_ID?.trim() || resolvedId ? "id" : "key",
-      matched: {
-        id: configured.id || configured.fieldId,
-        key: configured.key || configured.fieldKey || configured.name,
-        value: fieldValueRaw(configured),
-      },
-    };
+    const memberNumber = parseMemberNumberValue(fieldValueRaw(configured));
+    if (memberNumber) {
+      return {
+        memberNumber,
+        matchedBy:
+          env.GHL_MEMBER_NUMBER_FIELD_ID?.trim() || resolvedId ? "id" : "key",
+        matched: {
+          id: configured.id || configured.fieldId,
+          key: configured.key || configured.fieldKey || configured.name,
+          value: fieldValueRaw(configured),
+        },
+      };
+    }
   }
 
   const fallback = fields.find(
@@ -871,6 +937,89 @@ async function resolveMemberNumberFromFields(
     };
   }
 
+  if (contact) {
+    const fromContact = memberNumberFromContactObject(contact);
+    if (fromContact) {
+      return { memberNumber: fromContact, matchedBy: "contact" };
+    }
+  }
+
+  /**
+   * Last resort: GHL often returns only `{ id, value }` with no key.
+   * Skip known points/date fields, then take the best short code-looking value.
+   * Once found, cache that field id so later contacts stay consistent.
+   */
+  const skipIds = knownNonMemberFieldIds();
+  const candidates = fields
+    .map((f) => {
+      const id = f.id || f.fieldId || "";
+      const value = fieldValueRaw(f);
+      return {
+        f,
+        id,
+        value,
+        parsed: parseMemberNumberValue(value),
+      };
+    })
+    .filter(
+      (c) =>
+        c.parsed &&
+        valueLooksLikeMemberNumber(c.value) &&
+        (!c.id || !skipIds.has(c.id)) &&
+        !fieldMatchesPointsConfig(c.f) &&
+        !fieldLooksLikeCheckinPoints(c.f)
+    );
+
+  if (candidates.length === 1) {
+    const only = candidates[0];
+    if (only.id) cachedMemberNumberFieldId = only.id;
+    return {
+      memberNumber: only.parsed,
+      matchedBy: "value",
+      matched: {
+        id: only.id || undefined,
+        key: only.f.key || only.f.fieldKey || only.f.name,
+        value: only.value,
+      },
+    };
+  }
+
+  // Prefer pure numeric member #s (e.g. 107) over other codes when several match.
+  const numeric = candidates.filter((c) => /^\d{1,6}$/.test(c.parsed || ""));
+  if (numeric.length === 1) {
+    const only = numeric[0];
+    if (only.id) cachedMemberNumberFieldId = only.id;
+    return {
+      memberNumber: only.parsed,
+      matchedBy: "value",
+      matched: {
+        id: only.id || undefined,
+        key: only.f.key || only.f.fieldKey || only.f.name,
+        value: only.value,
+      },
+    };
+  }
+
+  // If we previously learned the field id via value match, reuse it.
+  if (cachedMemberNumberFieldId) {
+    const byCached = fields.find(
+      (f) => f.id === cachedMemberNumberFieldId || f.fieldId === cachedMemberNumberFieldId
+    );
+    if (byCached) {
+      const memberNumber = parseMemberNumberValue(fieldValueRaw(byCached));
+      if (memberNumber) {
+        return {
+          memberNumber,
+          matchedBy: "id",
+          matched: {
+            id: cachedMemberNumberFieldId,
+            value: fieldValueRaw(byCached),
+          },
+        };
+      }
+    }
+  }
+
   return { memberNumber: null, matchedBy: null };
 }
 
@@ -882,9 +1031,9 @@ export async function getGhlContactAppFields(
     return { points: null, memberNumber: null };
   }
 
-  const { fields } = await fetchGhlContactRaw(ghlContactId);
+  const { contact, fields } = await fetchGhlContactRaw(ghlContactId);
   const resolved = resolvePointsFromFields(fields);
-  const member = await resolveMemberNumberFromFields(fields);
+  const member = await resolveMemberNumberFromFields(fields, contact);
 
   if (resolved.points == null) {
     if (fields.length > 0) {
@@ -954,15 +1103,18 @@ export async function inspectGhlPoints(
     return { mock: true, points: null, memberNumber: null };
   }
 
-  const { fields } = await fetchGhlContactRaw(ghlContactId);
+  const { contact, fields } = await fetchGhlContactRaw(ghlContactId);
   const resolved = resolvePointsFromFields(fields);
-  const member = await resolveMemberNumberFromFields(fields);
+  const member = await resolveMemberNumberFromFields(fields, contact);
   const resolvedMemberFieldId = await resolveMemberNumberFieldId();
   return {
     configuredFieldId: env.GHL_POINTS_FIELD_ID || null,
     configuredFieldKey: env.GHL_POINTS_FIELD_KEY || null,
     memberNumberFieldId:
-      env.GHL_MEMBER_NUMBER_FIELD_ID?.trim() || resolvedMemberFieldId,
+      env.GHL_MEMBER_NUMBER_FIELD_ID?.trim() ||
+      resolvedMemberFieldId ||
+      cachedMemberNumberFieldId ||
+      null,
     memberNumberFieldKey: memberNumberFieldKey(),
     fieldCount: fields.length,
     points: resolved.points,
