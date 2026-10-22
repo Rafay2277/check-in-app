@@ -4,6 +4,7 @@ import { brand, colors, fonts } from "./theme";
 const logos = {
   white: require("../assets/logo-wing.png"),
   gold: require("../assets/logo-wing-gold.png"),
+  circle: require("../assets/logo-circle.png"),
 };
 
 type Props = {
@@ -18,52 +19,21 @@ export function BrandMark({
   size = 118,
   showWordmark = true,
 }: Props) {
-  if (variant === "circle") {
-    // Circle mark reads smaller than the winged logo at the same size prop.
-    const diameter = size * 1.18;
-    // Montserrat Bold "4" sits high in the em-box; push down + slight left
-    // so it reads optically centered in the circle.
-    const fontSize = diameter * 0.52;
-    return (
-      <View style={styles.wrap}>
-        <View
-          style={[
-            styles.circle,
-            {
-              width: diameter,
-              height: diameter,
-              borderRadius: diameter / 2,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.circleFour,
-              {
-                fontSize,
-                lineHeight: fontSize * 1.05,
-                height: fontSize * 1.05,
-                marginTop: diameter * 0.06,
-                transform: [{ translateX: -diameter * 0.02 }],
-              },
-            ]}
-          >
-            4
-          </Text>
-        </View>
-        {showWordmark ? (
-          <Text style={styles.wordmark}>{brand.lockup}</Text>
-        ) : null}
-      </View>
-    );
-  }
+  const source =
+    variant === "circle"
+      ? logos.circle
+      : variant === "gold"
+        ? logos.gold
+        : logos.white;
 
-  const source = variant === "gold" ? logos.gold : logos.white;
+  // Circle asset is square; wing lockups are slightly wider than tall.
+  const height = variant === "circle" ? size : size * 0.86;
+
   return (
     <View style={styles.wrap}>
       <Image
         source={source}
-        style={{ width: size, height: size * 0.86 }}
+        style={{ width: size, height }}
         resizeMode="contain"
       />
       {showWordmark ? (
@@ -85,18 +55,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "stretch",
     gap: 10,
-  },
-  circle: {
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  circleFour: {
-    color: "#111111",
-    fontFamily: fonts.sansBold,
-    includeFontPadding: false,
-    textAlign: "center",
-    textAlignVertical: "center",
   },
   wordmark: {
     color: colors.ink,

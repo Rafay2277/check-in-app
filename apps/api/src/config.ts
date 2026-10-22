@@ -75,6 +75,9 @@ const envSchema = z.object({
   GHL_LOCATION_ID: z.string().optional().default(""),
   GHL_POINTS_FIELD_KEY: z.string().optional().default(""),
   GHL_POINTS_FIELD_ID: z.string().optional().default(""),
+  /** Contact custom field for cafe member # ({{contact.member_number}}). */
+  GHL_MEMBER_NUMBER_FIELD_KEY: z.string().optional().default("member_number"),
+  GHL_MEMBER_NUMBER_FIELD_ID: z.string().optional().default(""),
   GHL_CHECKIN_DATE_FIELD_KEY: z.string().optional().default("checkin_date"),
   GHL_CHECKIN_DATE_FIELD_ID: z.string().optional().default(""),
   /** Custom Object schema key for per-visit history (empty = skip). */

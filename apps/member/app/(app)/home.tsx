@@ -54,7 +54,8 @@ export default function HomeScreen() {
     router.replace("/(auth)/welcome");
   }
 
-  const first = member?.name?.split(" ")[0];
+  const fullName = member?.name?.trim() || "Member";
+  const memberNumber = member?.memberNumber?.trim() || null;
 
   return (
     <Screen contentStyle={styles.safe} membershipTier={tier}>
@@ -67,9 +68,10 @@ export default function HomeScreen() {
           />
         ) : (
           <View style={styles.meta}>
-            <Text style={styles.since}>
-              {first ? `Hi, ${first}` : "Member"}
-            </Text>
+            <Text style={styles.greetingName}>{fullName}</Text>
+            {memberNumber ? (
+              <Text style={styles.greetingId}>#{memberNumber}</Text>
+            ) : null}
             <Hairline />
             <Text style={styles.label}>Check-in points</Text>
             <Text style={styles.points}>{member?.pointsTotal ?? 0}</Text>
@@ -125,12 +127,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     width: "78%",
   },
-  since: {
+  greetingName: {
+    color: colors.ink,
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    letterSpacing: 1.2,
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+  greetingId: {
     color: colors.muted,
     fontFamily: fonts.sansMedium,
-    fontSize: 11,
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
+    fontSize: 13,
+    letterSpacing: 1.6,
+    marginTop: 6,
+    textAlign: "center",
   },
   label: {
     color: colors.accentBright,

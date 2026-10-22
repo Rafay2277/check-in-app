@@ -708,11 +708,48 @@ function resolvePointsFromFields(fields: GhlCustomField[]): {
   return { points: null, matchedBy: null };
 }
 
-export async function getGhlPointsTotal(
+function fieldMatchesMemberNumberConfig(f: GhlCustomField): boolean {
+  const fieldId = env.GHL_MEMBER_NUMBER_FIELD_ID?.trim();
+  const fieldKey = normalizePointsFieldKey(
+    env.GHL_MEMBER_NUMBER_FIELD_KEY || "member_number"
+  );
+  if (fieldId && (f.id === fieldId || f.fieldId === fieldId)) return true;
+  if (!fieldKey) return false;
+  const candidates = [f.key, f.fieldKey, f.name]
+    .filter((k): k is string => Boolean(k))
+    .map((k) => normalizePointsFieldKey(k));
+  return candidates.some(
+    (k) =>
+      k === fieldKey ||
+      k.endsWith(`.${fieldKey}`) ||
+      k.endsWith(`_${fieldKey}`)
+  );
+}
+
+function parseMemberNumberValue(raw: unknown): string | null {
+  if (raw == null) return null;
+  let s = String(raw).trim();
+  if (!s) return null;
+  // Accept "107", "#107", "Member #107"
+  const hash = s.match(/#\s*([A-Za-z0-9_-]+)\s*$/);
+  if (hash) s = hash[1];
+  else s = s.replace(/^#\s*/, "");
+  s = s.trim();
+  return s || null;
+}
+
+function resolveMemberNumberFromFields(fields: GhlCustomField[]): string | null {
+  const configured = fields.find(fieldMatchesMemberNumberConfig);
+  if (configured) return parseMemberNumberValue(fieldValueRaw(configured));
+  return null;
+}
+
+/** Points + member # from one GHL contact fetch. */
+export async function getGhlContactAppFields(
   ghlContactId: string
-): Promise<number | null> {
+): Promise<{ points: number | null; memberNumber: string | null }> {
   if (env.MOCK_INTEGRATIONS) {
-    return null;
+    return { points: null, memberNumber: null };
   }
 
   const { fields } = await fetchGhlContactRaw(ghlContactId);
@@ -738,7 +775,24 @@ export async function getGhlPointsTotal(
     );
   }
 
-  return resolved.points;
+  return {
+    points: resolved.points,
+    memberNumber: resolveMemberNumberFromFields(fields),
+  };
+}
+
+export async function getGhlPointsTotal(
+  ghlContactId: string
+): Promise<number | null> {
+  const { points } = await getGhlContactAppFields(ghlContactId);
+  return points;
+}
+
+export async function getGhlMemberNumber(
+  ghlContactId: string
+): Promise<string | null> {
+  const { memberNumber } = await getGhlContactAppFields(ghlContactId);
+  return memberNumber;
 }
 
 /** Temporary diagnostics for contacts where live points fail to sync. */

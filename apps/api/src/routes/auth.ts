@@ -15,34 +15,45 @@ import {
 import { env } from "../config";
 import {
   findGhlContactByPhone,
-  getGhlPointsTotal,
+  getGhlContactAppFields,
   resolveContactMembership,
   type MembershipTier,
 } from "../integrations/ghl";
 import { ensureMembershipTierSchema } from "../lib/membershipTier";
+import { ensureMemberNumberSchema } from "../lib/memberNumber";
 
-/** Prefer live GHL check-in points over a stale local 0. */
-async function syncPointsFromGhl(
+/** Prefer live GHL check-in points + member # over stale local values. */
+async function syncProfileFromGhl(
   memberId: string,
   ghlContactId: string,
   localPoints: number
-): Promise<number> {
+): Promise<{ pointsTotal: number; memberNumber: string | null }> {
   try {
-    const ghlPoints = await getGhlPointsTotal(ghlContactId);
-    if (ghlPoints == null) return localPoints;
-    if (ghlPoints !== localPoints) {
-      await query(
-        `UPDATE members
-         SET points_total = GREATEST(points_total, $2),
-             updated_at = NOW()
-         WHERE id = $1`,
-        [memberId, ghlPoints]
-      );
+    const ghl = await getGhlContactAppFields(ghlContactId);
+    let pointsTotal = localPoints;
+    if (ghl.points != null) {
+      pointsTotal = Math.max(localPoints, ghl.points);
+      if (ghl.points !== localPoints) {
+        await query(
+          `UPDATE members
+           SET points_total = GREATEST(points_total, $2),
+               updated_at = NOW()
+           WHERE id = $1`,
+          [memberId, ghl.points]
+        );
+      }
     }
-    return Math.max(localPoints, ghlPoints);
+    await ensureMemberNumberSchema();
+    await query(
+      `UPDATE members
+       SET member_number = $2, updated_at = NOW()
+       WHERE id = $1`,
+      [memberId, ghl.memberNumber]
+    );
+    return { pointsTotal, memberNumber: ghl.memberNumber };
   } catch (err) {
-    console.warn("[auth] GHL points sync failed; using local total", err);
-    return localPoints;
+    console.warn("[auth] GHL profile sync failed; using local values", err);
+    return { pointsTotal: localPoints, memberNumber: null };
   }
 }
 import {
@@ -151,7 +162,7 @@ authRouter.post("/start", async (req, res) => {
           return { member, ...tokens };
         });
 
-        const pointsTotal = await syncPointsFromGhl(
+        const profile = await syncProfileFromGhl(
           session.member.id,
           contact.id,
           session.member.points_total
@@ -168,7 +179,8 @@ authRouter.post("/start", async (req, res) => {
             id: session.member.id,
             name: session.member.name,
             phoneNumber: session.member.phone_number,
-            pointsTotal,
+            pointsTotal: profile.pointsTotal,
+            memberNumber: profile.memberNumber,
             membershipTier: session.member.membership_tier,
           },
         });
@@ -381,7 +393,7 @@ authRouter.post("/verify", async (req, res) => {
       return;
     }
 
-    const pointsTotal = await syncPointsFromGhl(
+    const profile = await syncProfileFromGhl(
       session.member.id,
       session.ghlContactId,
       session.member.points_total
@@ -395,7 +407,8 @@ authRouter.post("/verify", async (req, res) => {
         id: session.member.id,
         name: session.member.name,
         phoneNumber: session.member.phone_number,
-        pointsTotal,
+        pointsTotal: profile.pointsTotal,
+        memberNumber: profile.memberNumber,
         membershipTier: session.member.membership_tier,
       },
     });

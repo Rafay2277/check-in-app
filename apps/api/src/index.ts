@@ -13,6 +13,7 @@ import { ghlRouter } from "./routes/ghl";
 import { startOutboxWorker, stopOutboxWorker } from "./worker/outbox";
 import { pool } from "./db/pool";
 import { ensureMembershipTierSchema } from "./lib/membershipTier";
+import { ensureMemberNumberSchema } from "./lib/memberNumber";
 
 assertLiveIntegrationsConfigured();
 
@@ -161,6 +162,9 @@ httpServer.listen(env.PORT, listenHost, () => {
   );
   void ensureMembershipTierSchema().catch((err) =>
     console.error("[membershipTier] schema ensure failed on boot", err)
+  );
+  void ensureMemberNumberSchema().catch((err) =>
+    console.error("[memberNumber] schema ensure failed on boot", err)
   );
   startOutboxWorker();
 });
