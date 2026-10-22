@@ -13,6 +13,9 @@ import {
 } from "../integrations/ghl";
 import { ensureMemberNumberSchema } from "../lib/memberNumber";
 
+/** Temporary: include GHL field samples on /me until member # matching is confirmed. */
+const DEBUG_MEMBER_NUMBER = true;
+
 export const checkinRouter = Router();
 
 checkinRouter.use(requireMemberAuth);
@@ -101,32 +104,75 @@ checkinRouter.get("/me", async (req: AuthedRequest, res) => {
   // GHL is source of truth for the score + member # shown in-app.
   let pointsTotal = member.points_total;
   let memberNumber = member.member_number;
+  let memberNumberDebug: Record<string, unknown> | null = null;
   try {
-    const ghl = await getGhlContactAppFields(member.ghl_contact_id);
-    if (ghl.points != null) {
-      pointsTotal = ghl.points;
-      if (ghl.points !== member.points_total) {
+    if (DEBUG_MEMBER_NUMBER) {
+      memberNumberDebug = await inspectGhlPoints(member.ghl_contact_id);
+      const ghlPoints =
+        typeof memberNumberDebug.points === "number"
+          ? memberNumberDebug.points
+          : null;
+      const ghlMemberNumber =
+        typeof memberNumberDebug.memberNumber === "string"
+          ? memberNumberDebug.memberNumber
+          : memberNumberDebug.memberNumber == null
+            ? null
+            : String(memberNumberDebug.memberNumber);
+
+      if (ghlPoints != null) {
+        pointsTotal = ghlPoints;
+        if (ghlPoints !== member.points_total) {
+          await query(
+            `UPDATE members
+             SET points_total = GREATEST(points_total, $2),
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [member.id, ghlPoints]
+          );
+        }
+      }
+      if (ghlMemberNumber !== member.member_number) {
+        memberNumber = ghlMemberNumber;
+        await ensureMemberNumberSchema();
         await query(
           `UPDATE members
-           SET points_total = GREATEST(points_total, $2),
-               updated_at = NOW()
+           SET member_number = $2, updated_at = NOW()
            WHERE id = $1`,
-          [member.id, ghl.points]
+          [member.id, ghlMemberNumber]
+        );
+      }
+    } else {
+      const ghl = await getGhlContactAppFields(member.ghl_contact_id);
+      if (ghl.points != null) {
+        pointsTotal = ghl.points;
+        if (ghl.points !== member.points_total) {
+          await query(
+            `UPDATE members
+             SET points_total = GREATEST(points_total, $2),
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [member.id, ghl.points]
+          );
+        }
+      }
+      if (ghl.memberNumber !== member.member_number) {
+        memberNumber = ghl.memberNumber;
+        await ensureMemberNumberSchema();
+        await query(
+          `UPDATE members
+           SET member_number = $2, updated_at = NOW()
+           WHERE id = $1`,
+          [member.id, ghl.memberNumber]
         );
       }
     }
-    if (ghl.memberNumber !== member.member_number) {
-      memberNumber = ghl.memberNumber;
-      await ensureMemberNumberSchema();
-      await query(
-        `UPDATE members
-         SET member_number = $2, updated_at = NOW()
-         WHERE id = $1`,
-        [member.id, ghl.memberNumber]
-      );
-    }
   } catch (err) {
     console.warn("[checkin/me] GHL profile sync failed; using local values", err);
+    if (DEBUG_MEMBER_NUMBER) {
+      memberNumberDebug = {
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
   }
 
   const checkedInToday = await memberCheckedInToday(member.id);
@@ -140,6 +186,9 @@ checkinRouter.get("/me", async (req: AuthedRequest, res) => {
     membershipTier,
     checkedInToday,
     checkinDate: calendarDateInShopTz(),
+    ...(DEBUG_MEMBER_NUMBER && memberNumberDebug
+      ? { memberNumberDebug }
+      : {}),
   });
 });
 

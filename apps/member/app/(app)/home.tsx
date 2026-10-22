@@ -71,6 +71,28 @@ export default function HomeScreen() {
             <Text style={styles.greetingName}>{fullName}</Text>
             {memberNumber ? (
               <Text style={styles.greetingId}>#{memberNumber}</Text>
+            ) : (
+              <Text style={styles.greetingIdMissing}>No member # from GHL</Text>
+            )}
+            {member?.memberNumberDebug ? (
+              <Text style={styles.debugBox} selectable>
+                {JSON.stringify(
+                  {
+                    memberNumber: member.memberNumberDebug.memberNumber ?? null,
+                    matchedBy:
+                      member.memberNumberDebug.memberNumberMatchedBy ?? null,
+                    fieldId:
+                      member.memberNumberDebug.memberNumberFieldId ?? null,
+                    fieldKey:
+                      member.memberNumberDebug.memberNumberFieldKey ?? null,
+                    fieldCount: member.memberNumberDebug.fieldCount ?? null,
+                    sampleFields: member.memberNumberDebug.sampleFields ?? null,
+                    error: member.memberNumberDebug.error ?? null,
+                  },
+                  null,
+                  2
+                )}
+              </Text>
             ) : null}
             <Hairline />
             <Text style={styles.label}>Check-in points</Text>
@@ -142,6 +164,22 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
     marginTop: 6,
     textAlign: "center",
+  },
+  greetingIdMissing: {
+    color: colors.bad,
+    fontFamily: fonts.sansMedium,
+    fontSize: 11,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  debugBox: {
+    marginTop: 10,
+    alignSelf: "stretch",
+    color: colors.muted,
+    fontFamily: fonts.sans,
+    fontSize: 9,
+    lineHeight: 12,
+    textAlign: "left",
   },
   label: {
     color: colors.accentBright,

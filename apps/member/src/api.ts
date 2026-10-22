@@ -13,6 +13,8 @@ export type Member = {
   pointsTotal: number;
   /** Cafe member # from GHL {{contact.member_number}}; null if unset */
   memberNumber?: string | null;
+  /** Temporary diagnostics while wiring member # */
+  memberNumberDebug?: Record<string, unknown>;
   /** premium = Flying 4 / Active Member; standard = Circle 4 / Car Community */
   membershipTier?: MembershipTier;
   checkedInToday?: boolean;
