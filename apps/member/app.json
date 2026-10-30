@@ -28,7 +28,6 @@
       "expo-secure-store",
       "expo-asset",
       "expo-font",
-      "expo-status-bar",
       [
         "expo-splash-screen",
         {
@@ -37,7 +36,8 @@
           "backgroundColor": "#111111",
           "imageWidth": 200
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "extra": {
       "apiBaseUrl": "https://dashboard.nouraiz.com",
