@@ -324,9 +324,15 @@ async function getGhlContactById(
   }
 }
 
+type GhlPipelineStage = {
+  id?: string;
+  name?: string;
+};
+
 type GhlPipeline = {
   id?: string;
   name?: string;
+  stages?: GhlPipelineStage[];
 };
 
 /** Flying 4 (paid Active Member) vs Circle 4 (Car Community). */
@@ -337,15 +343,24 @@ export type ContactMembership = {
   tier: MembershipTier | null;
 };
 
+/** null stageIds = any stage in the pipeline counts. */
+type PipelineAccessRule = {
+  pipelineId: string;
+  pipelineName: string;
+  /** When set, opportunity must be in one of these stages. */
+  stageIds: string[] | null;
+};
+
 type ResolvedPipelines = {
-  premiumIds: string[];
-  standardIds: string[];
+  premium: PipelineAccessRule[];
+  standard: PipelineAccessRule[];
   allIds: string[];
 };
 
 /** Cached allowed pipeline ids for this process (resolved by name). */
 let cachedResolvedPipelines: ResolvedPipelines | undefined;
 let cachedAllowedPipelineWarn = false;
+let cachedPremiumStageWarn = false;
 
 function splitPipelineNames(raw: string): string[] {
   return raw
@@ -362,6 +377,10 @@ function premiumPipelineNames(): string[] {
   return splitPipelineNames(env.GHL_PREMIUM_PIPELINE_NAMES);
 }
 
+function premiumAllowedStageNames(): string[] {
+  return splitPipelineNames(env.GHL_PREMIUM_ALLOWED_STAGE_NAMES);
+}
+
 async function resolveAllowedPipelines(): Promise<ResolvedPipelines> {
   if (cachedResolvedPipelines !== undefined) {
     return cachedResolvedPipelines;
@@ -369,8 +388,9 @@ async function resolveAllowedPipelines(): Promise<ResolvedPipelines> {
 
   const wanted = new Set(allowedPipelineNames());
   const premiumWanted = new Set(premiumPipelineNames());
+  const premiumStagesWanted = premiumAllowedStageNames();
   if (wanted.size === 0) {
-    cachedResolvedPipelines = { premiumIds: [], standardIds: [], allIds: [] };
+    cachedResolvedPipelines = { premium: [], standard: [], allIds: [] };
     return cachedResolvedPipelines;
   }
 
@@ -393,20 +413,53 @@ async function resolveAllowedPipelines(): Promise<ResolvedPipelines> {
     pipelines?: GhlPipeline[];
   };
 
-  const premiumIds: string[] = [];
-  const standardIds: string[] = [];
+  const premium: PipelineAccessRule[] = [];
+  const standard: PipelineAccessRule[] = [];
   for (const p of data.pipelines ?? []) {
     if (!p.id || !p.name) continue;
     const name = p.name.trim().toLowerCase();
     if (!wanted.has(name)) continue;
+
     if (premiumWanted.has(name)) {
-      premiumIds.push(p.id);
+      let stageIds: string[] | null = null;
+      if (premiumStagesWanted.length > 0) {
+        const wantedStages = new Set(premiumStagesWanted);
+        stageIds = (p.stages ?? [])
+          .filter(
+            (s) =>
+              s.id &&
+              s.name &&
+              wantedStages.has(s.name.trim().toLowerCase())
+          )
+          .map((s) => s.id!);
+        if (stageIds.length === 0 && !cachedPremiumStageWarn) {
+          cachedPremiumStageWarn = true;
+          console.warn(
+            `[ghl] premium pipeline "${p.name}" has no stages matching ` +
+              `[${premiumStagesWanted.join(", ")}]. ` +
+              `Check GHL_PREMIUM_ALLOWED_STAGE_NAMES.`
+          );
+        }
+      }
+      premium.push({
+        pipelineId: p.id,
+        pipelineName: p.name,
+        stageIds,
+      });
     } else {
-      standardIds.push(p.id);
+      // Car Community (and other non-premium allowlist pipelines): any stage.
+      standard.push({
+        pipelineId: p.id,
+        pipelineName: p.name,
+        stageIds: null,
+      });
     }
   }
 
-  const allIds = [...premiumIds, ...standardIds];
+  const allIds = [
+    ...premium.map((r) => r.pipelineId),
+    ...standard.map((r) => r.pipelineId),
+  ];
 
   if (allIds.length === 0 && !cachedAllowedPipelineWarn) {
     cachedAllowedPipelineWarn = true;
@@ -416,31 +469,36 @@ async function resolveAllowedPipelines(): Promise<ResolvedPipelines> {
     );
   }
 
-  cachedResolvedPipelines = { premiumIds, standardIds, allIds };
+  cachedResolvedPipelines = { premium, standard, allIds };
   return cachedResolvedPipelines;
 }
 
 async function contactHasOpportunityInPipeline(
   ghlContactId: string,
-  pipelineId: string
+  pipelineId: string,
+  pipelineStageId?: string
 ): Promise<boolean> {
   // Marketplace docs use camelCase; some clients send snake_case — try camel first.
-  const attempts: Array<Record<string, string>> = [
-    {
-      locationId: env.GHL_LOCATION_ID,
-      contactId: ghlContactId,
-      pipelineId,
-      status: "all",
-      limit: "1",
-    },
-    {
-      location_id: env.GHL_LOCATION_ID,
-      contact_id: ghlContactId,
-      pipeline_id: pipelineId,
-      status: "all",
-      limit: "1",
-    },
-  ];
+  const baseCamel: Record<string, string> = {
+    locationId: env.GHL_LOCATION_ID,
+    contactId: ghlContactId,
+    pipelineId,
+    status: "all",
+    limit: "1",
+  };
+  const baseSnake: Record<string, string> = {
+    location_id: env.GHL_LOCATION_ID,
+    contact_id: ghlContactId,
+    pipeline_id: pipelineId,
+    status: "all",
+    limit: "1",
+  };
+  if (pipelineStageId) {
+    baseCamel.pipelineStageId = pipelineStageId;
+    baseSnake.pipeline_stage_id = pipelineStageId;
+  }
+
+  const attempts = [baseCamel, baseSnake];
 
   let lastError = "";
   for (const params of attempts) {
@@ -473,9 +531,34 @@ async function contactHasOpportunityInPipeline(
   throw new Error(`GHL opportunity search failed: ${lastError}`);
 }
 
+async function contactMatchesPipelineRule(
+  ghlContactId: string,
+  rule: PipelineAccessRule
+): Promise<boolean> {
+  if (rule.stageIds === null) {
+    return contactHasOpportunityInPipeline(ghlContactId, rule.pipelineId);
+  }
+  if (rule.stageIds.length === 0) {
+    return false;
+  }
+  for (const stageId of rule.stageIds) {
+    if (
+      await contactHasOpportunityInPipeline(
+        ghlContactId,
+        rule.pipelineId,
+        stageId
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Resolve login eligibility + membership tier from GHL opportunity pipelines.
  * Active Member (premium) wins if the contact is also in Car Community.
+ * Premium access is limited to configured stages (default: Active Member, New Member).
  */
 export async function resolveContactMembership(
   ghlContactId: string
@@ -487,19 +570,19 @@ export async function resolveContactMembership(
     return { allowed: true, tier: "premium" };
   }
 
-  const { premiumIds, standardIds, allIds } = await resolveAllowedPipelines();
+  const { premium, standard, allIds } = await resolveAllowedPipelines();
   if (allIds.length === 0) {
     return { allowed: false, tier: null };
   }
 
-  for (const pipelineId of premiumIds) {
-    if (await contactHasOpportunityInPipeline(ghlContactId, pipelineId)) {
+  for (const rule of premium) {
+    if (await contactMatchesPipelineRule(ghlContactId, rule)) {
       return { allowed: true, tier: "premium" };
     }
   }
 
-  for (const pipelineId of standardIds) {
-    if (await contactHasOpportunityInPipeline(ghlContactId, pipelineId)) {
+  for (const rule of standard) {
+    if (await contactMatchesPipelineRule(ghlContactId, rule)) {
       return { allowed: true, tier: "standard" };
     }
   }

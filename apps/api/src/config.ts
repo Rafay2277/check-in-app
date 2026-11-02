@@ -115,6 +115,15 @@ const envSchema = z.object({
     .string()
     .optional()
     .default("Active Member"),
+  /**
+   * For premium pipelines only: comma-separated stage names that grant app access.
+   * Empty = any stage in the premium pipeline counts.
+   * Default: Active Member + New Member stages only.
+   */
+  GHL_PREMIUM_ALLOWED_STAGE_NAMES: z
+    .string()
+    .optional()
+    .default("Active Member,New Member"),
   OUTBOX_POLL_INTERVAL_MS: z.coerce.number().default(3000),
   OUTBOX_MAX_ATTEMPTS: z.coerce.number().default(8),
   /** Calendar day for permanent-card daily limit (IANA tz). */

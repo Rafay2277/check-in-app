@@ -36,7 +36,7 @@ app.get("/health", (_req, res) => {
         skipSmsOtp: config_1.env.SKIP_SMS_OTP,
         httpsPort: config_1.env.HTTPS_PORT,
         // Bump when verifying Hostinger picked up a deploy
-        apiBuild: "2026-10-30-circle-logo-v4",
+        apiBuild: "2026-11-02-premium-stage-gate",
         memberNumberFieldId: Boolean(config_1.env.GHL_MEMBER_NUMBER_FIELD_ID),
     });
 });
