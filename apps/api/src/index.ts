@@ -36,7 +36,7 @@ app.get("/health", (_req, res) => {
     skipSmsOtp: env.SKIP_SMS_OTP,
     httpsPort: env.HTTPS_PORT,
     // Bump when verifying Hostinger picked up a deploy
-    apiBuild: "2026-11-02-premium-stage-gate",
+    apiBuild: "2026-11-03-standard-stage-gate",
     memberNumberFieldId: Boolean(env.GHL_MEMBER_NUMBER_FIELD_ID),
   });
 });

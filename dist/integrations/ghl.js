@@ -249,6 +249,7 @@ async function getGhlContactById(ghlContactId) {
 let cachedResolvedPipelines;
 let cachedAllowedPipelineWarn = false;
 let cachedPremiumStageWarn = false;
+let cachedStandardStageWarn = false;
 function splitPipelineNames(raw) {
     return raw
         .split(",")
@@ -264,6 +265,17 @@ function premiumPipelineNames() {
 function premiumAllowedStageNames() {
     return splitPipelineNames(config_1.env.GHL_PREMIUM_ALLOWED_STAGE_NAMES);
 }
+function standardAllowedStageNames() {
+    return splitPipelineNames(config_1.env.GHL_STANDARD_ALLOWED_STAGE_NAMES);
+}
+function matchStageIds(stages, wantedStageNames) {
+    if (wantedStageNames.length === 0)
+        return null;
+    const wanted = new Set(wantedStageNames);
+    return (stages ?? [])
+        .filter((s) => s.id && s.name && wanted.has(s.name.trim().toLowerCase()))
+        .map((s) => s.id);
+}
 async function resolveAllowedPipelines() {
     if (cachedResolvedPipelines !== undefined) {
         return cachedResolvedPipelines;
@@ -271,6 +283,7 @@ async function resolveAllowedPipelines() {
     const wanted = new Set(allowedPipelineNames());
     const premiumWanted = new Set(premiumPipelineNames());
     const premiumStagesWanted = premiumAllowedStageNames();
+    const standardStagesWanted = standardAllowedStageNames();
     if (wanted.size === 0) {
         cachedResolvedPipelines = { premium: [], standard: [], allIds: [] };
         return cachedResolvedPipelines;
@@ -295,20 +308,14 @@ async function resolveAllowedPipelines() {
         if (!wanted.has(name))
             continue;
         if (premiumWanted.has(name)) {
-            let stageIds = null;
-            if (premiumStagesWanted.length > 0) {
-                const wantedStages = new Set(premiumStagesWanted);
-                stageIds = (p.stages ?? [])
-                    .filter((s) => s.id &&
-                    s.name &&
-                    wantedStages.has(s.name.trim().toLowerCase()))
-                    .map((s) => s.id);
-                if (stageIds.length === 0 && !cachedPremiumStageWarn) {
-                    cachedPremiumStageWarn = true;
-                    console.warn(`[ghl] premium pipeline "${p.name}" has no stages matching ` +
-                        `[${premiumStagesWanted.join(", ")}]. ` +
-                        `Check GHL_PREMIUM_ALLOWED_STAGE_NAMES.`);
-                }
+            const stageIds = matchStageIds(p.stages, premiumStagesWanted);
+            if (stageIds !== null &&
+                stageIds.length === 0 &&
+                !cachedPremiumStageWarn) {
+                cachedPremiumStageWarn = true;
+                console.warn(`[ghl] premium pipeline "${p.name}" has no stages matching ` +
+                    `[${premiumStagesWanted.join(", ")}]. ` +
+                    `Check GHL_PREMIUM_ALLOWED_STAGE_NAMES.`);
             }
             premium.push({
                 pipelineId: p.id,
@@ -317,11 +324,19 @@ async function resolveAllowedPipelines() {
             });
         }
         else {
-            // Car Community (and other non-premium allowlist pipelines): any stage.
+            const stageIds = matchStageIds(p.stages, standardStagesWanted);
+            if (stageIds !== null &&
+                stageIds.length === 0 &&
+                !cachedStandardStageWarn) {
+                cachedStandardStageWarn = true;
+                console.warn(`[ghl] standard pipeline "${p.name}" has no stages matching ` +
+                    `[${standardStagesWanted.join(", ")}]. ` +
+                    `Check GHL_STANDARD_ALLOWED_STAGE_NAMES.`);
+            }
             standard.push({
                 pipelineId: p.id,
                 pipelineName: p.name,
-                stageIds: null,
+                stageIds,
             });
         }
     }
@@ -397,7 +412,8 @@ async function contactMatchesPipelineRule(ghlContactId, rule) {
 /**
  * Resolve login eligibility + membership tier from GHL opportunity pipelines.
  * Active Member (premium) wins if the contact is also in Car Community.
- * Premium access is limited to configured stages (default: Active Member, New Member).
+ * Premium stages default: Active Member, New Member.
+ * Standard (Car Community) stages default: General Community.
  */
 async function resolveContactMembership(ghlContactId) {
     if (config_1.env.MOCK_INTEGRATIONS) {

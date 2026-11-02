@@ -361,6 +361,7 @@ type ResolvedPipelines = {
 let cachedResolvedPipelines: ResolvedPipelines | undefined;
 let cachedAllowedPipelineWarn = false;
 let cachedPremiumStageWarn = false;
+let cachedStandardStageWarn = false;
 
 function splitPipelineNames(raw: string): string[] {
   return raw
@@ -381,6 +382,23 @@ function premiumAllowedStageNames(): string[] {
   return splitPipelineNames(env.GHL_PREMIUM_ALLOWED_STAGE_NAMES);
 }
 
+function standardAllowedStageNames(): string[] {
+  return splitPipelineNames(env.GHL_STANDARD_ALLOWED_STAGE_NAMES);
+}
+
+function matchStageIds(
+  stages: GhlPipelineStage[] | undefined,
+  wantedStageNames: string[]
+): string[] | null {
+  if (wantedStageNames.length === 0) return null;
+  const wanted = new Set(wantedStageNames);
+  return (stages ?? [])
+    .filter(
+      (s) => s.id && s.name && wanted.has(s.name.trim().toLowerCase())
+    )
+    .map((s) => s.id!);
+}
+
 async function resolveAllowedPipelines(): Promise<ResolvedPipelines> {
   if (cachedResolvedPipelines !== undefined) {
     return cachedResolvedPipelines;
@@ -389,6 +407,7 @@ async function resolveAllowedPipelines(): Promise<ResolvedPipelines> {
   const wanted = new Set(allowedPipelineNames());
   const premiumWanted = new Set(premiumPipelineNames());
   const premiumStagesWanted = premiumAllowedStageNames();
+  const standardStagesWanted = standardAllowedStageNames();
   if (wanted.size === 0) {
     cachedResolvedPipelines = { premium: [], standard: [], allIds: [] };
     return cachedResolvedPipelines;
@@ -421,25 +440,18 @@ async function resolveAllowedPipelines(): Promise<ResolvedPipelines> {
     if (!wanted.has(name)) continue;
 
     if (premiumWanted.has(name)) {
-      let stageIds: string[] | null = null;
-      if (premiumStagesWanted.length > 0) {
-        const wantedStages = new Set(premiumStagesWanted);
-        stageIds = (p.stages ?? [])
-          .filter(
-            (s) =>
-              s.id &&
-              s.name &&
-              wantedStages.has(s.name.trim().toLowerCase())
-          )
-          .map((s) => s.id!);
-        if (stageIds.length === 0 && !cachedPremiumStageWarn) {
-          cachedPremiumStageWarn = true;
-          console.warn(
-            `[ghl] premium pipeline "${p.name}" has no stages matching ` +
-              `[${premiumStagesWanted.join(", ")}]. ` +
-              `Check GHL_PREMIUM_ALLOWED_STAGE_NAMES.`
-          );
-        }
+      const stageIds = matchStageIds(p.stages, premiumStagesWanted);
+      if (
+        stageIds !== null &&
+        stageIds.length === 0 &&
+        !cachedPremiumStageWarn
+      ) {
+        cachedPremiumStageWarn = true;
+        console.warn(
+          `[ghl] premium pipeline "${p.name}" has no stages matching ` +
+            `[${premiumStagesWanted.join(", ")}]. ` +
+            `Check GHL_PREMIUM_ALLOWED_STAGE_NAMES.`
+        );
       }
       premium.push({
         pipelineId: p.id,
@@ -447,11 +459,23 @@ async function resolveAllowedPipelines(): Promise<ResolvedPipelines> {
         stageIds,
       });
     } else {
-      // Car Community (and other non-premium allowlist pipelines): any stage.
+      const stageIds = matchStageIds(p.stages, standardStagesWanted);
+      if (
+        stageIds !== null &&
+        stageIds.length === 0 &&
+        !cachedStandardStageWarn
+      ) {
+        cachedStandardStageWarn = true;
+        console.warn(
+          `[ghl] standard pipeline "${p.name}" has no stages matching ` +
+            `[${standardStagesWanted.join(", ")}]. ` +
+            `Check GHL_STANDARD_ALLOWED_STAGE_NAMES.`
+        );
+      }
       standard.push({
         pipelineId: p.id,
         pipelineName: p.name,
-        stageIds: null,
+        stageIds,
       });
     }
   }
@@ -558,7 +582,8 @@ async function contactMatchesPipelineRule(
 /**
  * Resolve login eligibility + membership tier from GHL opportunity pipelines.
  * Active Member (premium) wins if the contact is also in Car Community.
- * Premium access is limited to configured stages (default: Active Member, New Member).
+ * Premium stages default: Active Member, New Member.
+ * Standard (Car Community) stages default: General Community.
  */
 export async function resolveContactMembership(
   ghlContactId: string
