@@ -37,6 +37,9 @@ export default function ConfirmScreen() {
     }
   }
 
+  const sheetMark = tierMarkVariant(tier, "sheet");
+  const flying = tier === "premium";
+
   return (
     <Screen contentStyle={styles.safe} membershipTier={tier}>
       <View style={styles.hero}>
@@ -45,26 +48,27 @@ export default function ConfirmScreen() {
 
       <View style={styles.sheet}>
         <View style={styles.handle} />
-        <BrandMark
-          variant={tierMarkVariant(tier, "sheet")}
-          size={52}
-          showWordmark={false}
-        />
-        <Text style={styles.title}>Did you bring your car today?</Text>
+        {sheetMark ? (
+          <BrandMark variant={sheetMark} size={52} showWordmark={false} />
+        ) : null}
+        <Text style={styles.title}>
+          {flying ? "Did you bring your car today?" : "Ready to check in?"}
+        </Text>
         <Text style={styles.copy}>
-          Members enjoy one complimentary coffee per visit when they bring their
-          registered car.
+          {flying
+            ? "Members enjoy one complimentary coffee per visit when they bring their registered car."
+            : "Show your QR to staff at the counter to record your visit."}
         </Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         <View style={styles.actions}>
           <GoldButton
-            label="Yes, I brought my car"
+            label={flying ? "Yes, I brought my car" : "Check in"}
             onPress={onConfirm}
             loading={busy}
             membershipTier={tier}
           />
           <GhostButton
-            label="No, just here for coffee"
+            label={flying ? "No, just here for coffee" : "Not now"}
             onPress={() => router.back()}
             disabled={busy}
             membershipTier={tier}

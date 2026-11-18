@@ -13,7 +13,8 @@ export type MembershipTheme = {
   ghostText: string;
   /** Brand mark style */
   mark: "circle" | "wing";
-  sheetMark: "circle" | "wing" | "wing-gold";
+  /** In-card mark. none = Car Community does not show the Flying 4 wing. */
+  sheetMark: "circle" | "wing" | "wing-gold" | "none";
 };
 
 const standard: MembershipTheme = {
@@ -24,7 +25,7 @@ const standard: MembershipTheme = {
   ghostBorder: "rgba(238, 227, 207, 0.28)",
   ghostText: colors.ink,
   mark: "circle",
-  sheetMark: "wing-gold",
+  sheetMark: "none",
 };
 
 const premium: MembershipTheme = {

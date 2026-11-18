@@ -151,9 +151,10 @@ const styles = StyleSheet.create({
 function markVariant(
   sheetOrHero: "mark" | "sheetMark",
   tier: MembershipTier | null | undefined
-): "white" | "gold" | "circle" {
+): "white" | "gold" | "circle" | null {
   const theme = membershipTheme(tier);
   const kind = theme[sheetOrHero];
+  if (kind === "none") return null;
   if (kind === "circle") return "circle";
   if (kind === "wing-gold") return "gold";
   return "white";
@@ -161,7 +162,15 @@ function markVariant(
 
 export function tierMarkVariant(
   tier: MembershipTier | null | undefined,
+  which: "hero"
+): "white" | "gold" | "circle";
+export function tierMarkVariant(
+  tier: MembershipTier | null | undefined,
+  which: "sheet"
+): "white" | "gold" | "circle" | null;
+export function tierMarkVariant(
+  tier: MembershipTier | null | undefined,
   which: "hero" | "sheet" = "hero"
-): "white" | "gold" | "circle" {
+): "white" | "gold" | "circle" | null {
   return markVariant(which === "sheet" ? "sheetMark" : "mark", tier);
 }

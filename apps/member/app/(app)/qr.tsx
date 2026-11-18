@@ -119,6 +119,7 @@ export default function QrScreen() {
   }
 
   const expired = phase === "expired";
+  const sheetMark = tierMarkVariant(tier, "sheet");
 
   return (
     <Screen contentStyle={styles.safe} membershipTier={tier}>
@@ -127,11 +128,9 @@ export default function QrScreen() {
       </View>
 
       <View style={styles.card}>
-        <BrandMark
-          variant={tierMarkVariant(tier, "sheet")}
-          size={44}
-          showWordmark={false}
-        />
+        {sheetMark ? (
+          <BrandMark variant={sheetMark} size={44} showWordmark={false} />
+        ) : null}
         <View style={styles.check}>
           <Text style={styles.checkMark}>✓</Text>
         </View>
