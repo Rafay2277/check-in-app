@@ -13,7 +13,7 @@ export type MembershipTheme = {
   ghostText: string;
   /** Brand mark style */
   mark: "circle" | "wing";
-  /** In-card mark. none = Car Community does not show the Flying 4 wing. */
+  /** In-card mark. none = no logo inside the card (both tiers; hero logo stays). */
   sheetMark: "circle" | "wing" | "wing-gold" | "none";
 };
 
@@ -36,7 +36,7 @@ const premium: MembershipTheme = {
   ghostBorder: "rgba(255, 255, 255, 0.55)",
   ghostText: "#ffffff",
   mark: "wing",
-  sheetMark: "wing",
+  sheetMark: "none",
 };
 
 export function membershipTheme(

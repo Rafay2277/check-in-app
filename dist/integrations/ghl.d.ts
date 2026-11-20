@@ -31,6 +31,8 @@ export type ContactMembership = {
 /**
  * Resolve login eligibility + membership tier from GHL opportunity pipelines.
  * Active Member (premium) wins if the contact is also in Car Community.
+ * Premium stages default: Active Member, New Member.
+ * Standard (Car Community) stages default: General Community.
  */
 export declare function resolveContactMembership(ghlContactId: string): Promise<ContactMembership>;
 /** True when the contact is in Active Member or Car Community (or configured allowlist). */
